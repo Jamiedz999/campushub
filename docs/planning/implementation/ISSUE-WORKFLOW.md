@@ -16,20 +16,25 @@ The cost of that split, named rather than hidden: **an Issue amendment gets no `
 
 **GitHub's native issue dependencies are the only record of what is blocked.** They are computed, they update themselves the moment a blocker closes, and GitHub renders them in the issue list without anyone opening this file.
 
-There are deliberately **no `ready` or `blocked` labels**. A label saying what the dependency graph already says is a second copy of the same fact with nothing keeping it honest: close a blocker and the graph is right while the label is wrong, and from then on the two disagree with no way to tell which was meant. The only labels are `sprint-N`, which record intent and cannot be derived from anything.
+There is deliberately **no `blocked` label**. A label saying what the dependency graph already says is a second copy of the same fact with nothing keeping it honest: close a blocker and the graph is right while the label is wrong, and from then on the two disagree with no way to tell which was meant.
 
-The Definition of Ready below is a checklist a human runs before starting, not a state stored anywhere.
+**There is a `ready` label, and it is not that.** Zero open blockers does not mean startable — the previous increment may be broken, an environment input may not have arrived, or a decision the Issue leans on may turn out not to exist. That is a human judgement, nothing else in the system records it, and it cannot be derived from the dependency graph or from anything else. `ready` is where it is recorded.
+
+Apply it to **exactly one Issue at a time**, and remove it when that Issue closes. A closed Issue still wearing `ready` is precisely the drift this file exists to prevent.
+
+`sprint-N` records intent and cannot be derived either, so it stays.
 
 ## Definition of Ready
 
-An Issue may be started when all of these hold:
+An Issue receives `ready` only when all of these hold:
 
-1. Every Issue in its `Blocked by:` line is **merged**, not merely finished.
+1. Every blocker on its dependency graph is **merged and closed**, not merely finished.
 2. Every decision it references exists and is resolved. **An Issue that needs a decision nobody made is not ready** — it goes back to the map as a new ticket rather than being resolved by whoever is coding at the time.
 3. Its acceptance criteria are checkable by someone who did not write them.
 4. Any environment input it names has been supplied.
+5. The previously merged increment still works.
 
-**Only the first unblocked Issue is ready.** Later Issues stay blocked until their dependency is merged. This is deliberate: the queue exists to stop several half-finished vertical slices from coexisting, which is the failure mode a solo project falls into most easily.
+**Unblocked is not the same as ready, and exactly one Issue is `ready` at a time.** Several Issues can be unblocked at once — the moment #3 merges, both #4 and #7 are — and labelling all of them would let work start on assumptions an earlier Issue was supposed to establish. Rationing the label is what stops several half-finished vertical slices coexisting, which is the failure mode a solo project falls into most easily.
 
 ## Definition of Done
 
@@ -69,6 +74,6 @@ Implementation regularly discovers what planning could not. When it does:
 | [#11 Harden the Core with risk-based evidence](https://github.com/Jamiedz999/campushub/issues/11) | 5 | #9, #10 |
 | [#12 Package the portfolio release](https://github.com/Jamiedz999/campushub/issues/12) | 5 | #11 |
 
-**[#1](https://github.com/Jamiedz999/campushub/issues/1) has no open blockers. Everything else does — check the graph, not this table, which is a map of intent and can fall behind.**
+**[#1](https://github.com/Jamiedz999/campushub/issues/1) is `ready`.** The table above is a map of intent and can fall behind; the dependency graph says what is blocked, and the `ready` label says what may actually be started.
 
 #7 depends only on #3, so it is the one Issue that could be taken out of Sprint order if Venue work is more appealing than form work on a given week.
