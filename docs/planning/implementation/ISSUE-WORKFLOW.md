@@ -6,9 +6,19 @@ Status: current
 
 An Issue spec in [`../issues/`](../issues/) is the authoritative statement of one increment: what changes, what must be true when it is done, and what tests prove it. Specs are files in this repository and are reviewed like code.
 
-Each spec has one GitHub Issue carrying a one-paragraph summary and a permalink to the committed spec. **The spec never lives in the issue body.** Execution state — open, closed, `ready`/`blocked`, `sprint-N` — lives only on GitHub; the spec files carry `Sprint:` and `Area:`, which describe the work, not where it stands.
+Each spec has one GitHub Issue carrying a one-paragraph summary and a link to the committed spec. **The spec never lives in the issue body.** The spec files carry `Sprint:` and `Area:`, which describe the work; nothing in them says where the work stands.
 
-Issue titles are written plainly, with no `CH-0NN` prefix. The local `0NN` numbering orders the spec files and nothing else; the permalink in each issue body is what ties the two together. Dependencies use **GitHub's native issue dependencies**, so the frontier is visible in the GitHub UI without opening this document.
+Issue titles are written plainly, with no `CH-0NN` prefix. The local `0NN` numbering orders the spec files and nothing else.
+
+Spec links point at `blob/main/`, not at a commit SHA. A SHA-pinned link freezes a spec at the moment the issue was filed, so an amended spec would silently keep serving the superseded text — and every such link breaks if history is ever rewritten. The spec is a living document and the issue should show its current state.
+
+## Where execution state lives
+
+**GitHub's native issue dependencies are the only record of what is blocked.** They are computed, they update themselves the moment a blocker closes, and GitHub renders them in the issue list without anyone opening this file.
+
+There are deliberately **no `ready` or `blocked` labels**. A label saying what the dependency graph already says is a second copy of the same fact with nothing keeping it honest: close a blocker and the graph is right while the label is wrong, and from then on the two disagree with no way to tell which was meant. The only labels are `sprint-N`, which record intent and cannot be derived from anything.
+
+The Definition of Ready below is a checklist a human runs before starting, not a state stored anywhere.
 
 ## Definition of Ready
 
@@ -59,6 +69,6 @@ Implementation regularly discovers what planning could not. When it does:
 | [#11 Harden the Core with risk-based evidence](https://github.com/Jamiedz999/campushub/issues/11) | [`030`](../issues/030-harden-core-with-risk-based-evidence.md) | 5 | #9, #10 |
 | [#12 Package the portfolio release](https://github.com/Jamiedz999/campushub/issues/12) | [`031`](../issues/031-package-portfolio-release.md) | 5 | #11 |
 
-**[#1](https://github.com/Jamiedz999/campushub/issues/1) is ready. Everything else is blocked.**
+**[#1](https://github.com/Jamiedz999/campushub/issues/1) has no open blockers. Everything else does — check the graph, not this table, which is a map of intent and can fall behind.**
 
 #7 depends only on #3, so it is the one Issue that could be taken out of Sprint order if Venue work is more appealing than form work on a given week.
