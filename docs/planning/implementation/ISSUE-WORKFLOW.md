@@ -6,7 +6,9 @@ Status: current
 
 An Issue spec in [`../issues/`](../issues/) is the authoritative statement of one increment: what changes, what must be true when it is done, and what tests prove it. Specs are files in this repository and are reviewed like code.
 
-Once a GitHub remote exists, each spec becomes one GitHub Issue carrying a one-paragraph summary and a permalink to the committed spec. **The spec never lives in the issue body.** Execution state — open, closed, labels — lives only on GitHub; the spec files carry `Sprint:` and `Area:`, which describe the work, not where it stands.
+Each spec has one GitHub Issue carrying a one-paragraph summary and a permalink to the committed spec. **The spec never lives in the issue body.** Execution state — open, closed, `ready`/`blocked`, `sprint-N` — lives only on GitHub; the spec files carry `Sprint:` and `Area:`, which describe the work, not where it stands.
+
+Issue titles are written plainly, with no `CH-0NN` prefix. The local `0NN` numbering orders the spec files and nothing else; the permalink in each issue body is what ties the two together. Dependencies use **GitHub's native issue dependencies**, so the frontier is visible in the GitHub UI without opening this document.
 
 ## Definition of Ready
 
@@ -28,8 +30,8 @@ An Issue may be started when all of these hold:
 
 ## Branch and commit convention
 
-- Branch `ch-0NN-<slug>`, matching the Issue number.
-- Commits prefixed `CH-0NN:`.
+- Branch `ch-0NN-<slug>`, matching the spec number.
+- Commits prefixed `CH-0NN:`, matching the spec number.
 - One Issue per pull request. A PR that grows a second Issue's work is split.
 
 ## When an Issue turns out to be wrong
@@ -42,21 +44,21 @@ Implementation regularly discovers what planning could not. When it does:
 
 ## The queue
 
-| Issue | Sprint | Blocked by |
-|---|---:|---|
-| [CH-020 Scaffold the full-stack walking skeleton](../issues/020-scaffold-full-stack-walking-skeleton.md) | 1 | — |
-| [CH-021 Add sign-in, roles and Club grants](../issues/021-add-signin-roles-and-club-grants.md) | 1 | 020 |
-| [CH-022 Add the Event document, lifecycle and browse](../issues/022-add-event-lifecycle-and-browse.md) | 1 | 021 |
-| [CH-023 Add the Seat Ledger — registration and capacity](../issues/023-add-seat-ledger-registration-and-capacity.md) | 2 | 022 |
-| [CH-024 Add the Waitlist, withdrawal and promotion](../issues/024-add-waitlist-withdrawal-and-promotion.md) | 2 | 023 |
-| [CH-025 Add per-Event custom registration forms](../issues/025-add-custom-registration-forms.md) | 3 | 024 |
-| [CH-026 Add Venues and Slot booking](../issues/026-add-venues-and-slot-booking.md) | 3 | 022 |
-| [CH-027 Add QR check-in and attendance](../issues/027-add-qr-checkin-and-attendance.md) | 4 | 024, 026 |
-| [CH-028 Add the live attendee count over WebSocket](../issues/028-add-live-attendee-count.md) | 4 | 027 |
-| [CH-029 Build the attendance dashboard](../issues/029-build-attendance-dashboard.md) | 5 | 027 |
-| [CH-030 Harden the Core with risk-based evidence](../issues/030-harden-core-with-risk-based-evidence.md) | 5 | 028, 029 |
-| [CH-031 Package the portfolio release](../issues/031-package-portfolio-release.md) | 5 | 030 |
+| Issue | Spec | Sprint | Blocked by |
+|---|---|---:|---|
+| [#1 Scaffold the full-stack walking skeleton](https://github.com/Jamiedz999/campushub/issues/1) | [`020`](../issues/020-scaffold-full-stack-walking-skeleton.md) | 1 | — |
+| [#2 Add sign-in, roles and Club grants](https://github.com/Jamiedz999/campushub/issues/2) | [`021`](../issues/021-add-signin-roles-and-club-grants.md) | 1 | #1 |
+| [#3 Add the Event document, lifecycle and browse](https://github.com/Jamiedz999/campushub/issues/3) | [`022`](../issues/022-add-event-lifecycle-and-browse.md) | 1 | #2 |
+| [#4 Add the Seat Ledger — registration and capacity](https://github.com/Jamiedz999/campushub/issues/4) | [`023`](../issues/023-add-seat-ledger-registration-and-capacity.md) | 2 | #3 |
+| [#5 Add the Waitlist, withdrawal and promotion](https://github.com/Jamiedz999/campushub/issues/5) | [`024`](../issues/024-add-waitlist-withdrawal-and-promotion.md) | 2 | #4 |
+| [#6 Add per-Event custom registration forms](https://github.com/Jamiedz999/campushub/issues/6) | [`025`](../issues/025-add-custom-registration-forms.md) | 3 | #5 |
+| [#7 Add Venues and Slot booking](https://github.com/Jamiedz999/campushub/issues/7) | [`026`](../issues/026-add-venues-and-slot-booking.md) | 3 | #3 |
+| [#8 Add QR check-in and attendance](https://github.com/Jamiedz999/campushub/issues/8) | [`027`](../issues/027-add-qr-checkin-and-attendance.md) | 4 | #5, #7 |
+| [#9 Add the live attendee count over WebSocket](https://github.com/Jamiedz999/campushub/issues/9) | [`028`](../issues/028-add-live-attendee-count.md) | 4 | #8 |
+| [#10 Build the attendance dashboard](https://github.com/Jamiedz999/campushub/issues/10) | [`029`](../issues/029-build-attendance-dashboard.md) | 5 | #8 |
+| [#11 Harden the Core with risk-based evidence](https://github.com/Jamiedz999/campushub/issues/11) | [`030`](../issues/030-harden-core-with-risk-based-evidence.md) | 5 | #9, #10 |
+| [#12 Package the portfolio release](https://github.com/Jamiedz999/campushub/issues/12) | [`031`](../issues/031-package-portfolio-release.md) | 5 | #11 |
 
-**CH-020 is ready. Everything else is blocked.**
+**[#1](https://github.com/Jamiedz999/campushub/issues/1) is ready. Everything else is blocked.**
 
-CH-026 depends only on CH-022, so it is the one Issue that could be taken out of Sprint order if Venue work is more appealing than form work on a given week.
+#7 depends only on #3, so it is the one Issue that could be taken out of Sprint order if Venue work is more appealing than form work on a given week.
