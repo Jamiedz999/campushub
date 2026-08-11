@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CampusHub — Club officer console prototype</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#14161a;--mut:#6b7280;--line:#e3e5e9;
+        --ok:#0f7b4f;--okbg:#e8f5ee;--warn:#8a5a00;--warnbg:#fdf3e0;
+        --bad:#a4262c;--badbg:#fdecec;--wait:#3b4ea8;--waitbg:#eaeefb;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:28px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 24px;font-size:13px;max-width:74ch}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);
+     margin:34px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .win{background:var(--card);border:1px solid var(--line);border-radius:12px;
+       overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px}
+  .cap{font-size:11px;font-weight:600;color:var(--mut);background:#eceef1;
+       padding:6px 13px;border-bottom:1px solid var(--line)}
+  .body{padding:16px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+  .col{flex:1;min-width:300px}
+  .pill{display:inline-block;font-size:11.5px;font-weight:650;padding:3px 9px;border-radius:99px}
+  .p-ok{background:var(--okbg);color:var(--ok)} .p-warn{background:var(--warnbg);color:var(--warn)}
+  .p-bad{background:var(--badbg);color:var(--bad)} .p-wait{background:var(--waitbg);color:var(--wait)}
+  .p-mut{background:#eceef1;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+     color:var(--mut);border-bottom:1px solid var(--line);padding:6px 8px}
+  td{padding:7px 8px;border-bottom:1px solid #f0f1f3}
+  .btn{display:inline-block;padding:7px 13px;border-radius:8px;font-weight:650;
+       font-size:13px;border:0;cursor:default}
+  .b-pri{background:#14161a;color:#fff} .b-sec{background:#eceef1;color:var(--ink)}
+  .b-dis{background:#f0f1f3;color:#aeb3bb} .b-dan{background:var(--badbg);color:var(--bad)}
+  label{display:block;font-size:12px;font-weight:600;margin:11px 0 4px}
+  input,select{width:100%;padding:7px;border:1px solid var(--line);border-radius:7px;
+       font:inherit;font-size:13px;background:#fcfcfd}
+  .hint{font-size:11.5px;color:var(--mut);margin-top:3px}
+  .note{background:#fffbe8;border:1px solid #f0e2b0;border-radius:8px;padding:9px 11px;
+        font-size:12px;margin-top:11px;color:#6b5a1e}
+  .q{background:#eef1ff;border:1px solid #ccd5f5;border-radius:8px;padding:11px 13px;
+     font-size:13px;margin:12px 0 0;max-width:78ch}
+  .q b{display:block;margin-bottom:3px}
+  .steps{display:flex;gap:0;margin-bottom:14px;font-size:12px}
+  .steps div{flex:1;padding:6px 8px;text-align:center;background:#f0f1f3;color:var(--mut);
+             border-right:2px solid #fff;font-weight:600}
+  .steps div.on{background:#14161a;color:#fff}
+  .steps div.done{background:var(--okbg);color:var(--ok)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .kpi{background:#fafbfc;border:1px solid var(--line);border-radius:9px;padding:11px}
+  .kpi b{display:block;font-size:24px;line-height:1.2}
+  .kpi span{font-size:11px;color:var(--mut)}
+  .tl{display:flex;height:30px;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+      font-size:10.5px;font-weight:600;margin-top:6px}
+  .tl div{display:flex;align-items:center;justify-content:center;border-right:1px solid #fff}
+  .free{background:#f4f5f7;color:#aeb3bb} .taken{background:var(--waitbg);color:var(--wait)}
+  .clash{background:var(--badbg);color:var(--bad)}
+  .qr{width:120px;height:120px;background:repeating-conic-gradient(#14161a 0 25%,#fff 0 50%) 0 0/13px 13px;
+      border:5px solid #fff;box-shadow:0 0 0 1px var(--line);border-radius:8px}
+  .bars{display:flex;align-items:flex-end;gap:7px;height:90px;margin-top:8px}
+  .bars div{flex:1;background:var(--waitbg);border-radius:4px 4px 0 0;position:relative}
+  .bars div i{position:absolute;inset:auto 0 0 0;background:var(--wait);border-radius:4px 4px 0 0;display:block}
+  ol{margin:6px 0 0 18px;padding:0} li{margin:3px 0;font-size:13px}
+</style>
+</head>
+<body>
+
+<h1>Club officer console — throwaway prototype</h1>
+<p class="sub">Desktop surface, state gallery. Not code to keep. Shows the officer's path from creating an
+Event to reading its attendance, with the failure states the resolved decisions actually produce.</p>
+
+<h2>1 · Creating an Event — Status is a decision, Phase is a reading</h2>
+<div class="row">
+  <div class="col"><div class="win"><div class="cap">Draft · everything editable</div><div class="body">
+    <div class="steps"><div class="on">Details</div><div>Venue</div><div>Form</div><div>Publish</div></div>
+    <span class="pill p-mut">Draft</span>
+    <label>Title</label><input value="Intro to Climbing">
+    <label>Capacity</label><input value="40">
+    <p class="hint">Required and finite. Can be raised later, never lowered.</p>
+    <div class="row" style="gap:10px">
+      <div class="col"><label>Registration opens</label><input value="2026-02-20 09:00"></div>
+      <div class="col"><label>Registration closes</label><input value="2026-03-02 23:59"></div>
+    </div>
+    <div class="row" style="gap:10px">
+      <div class="col"><label>Starts</label><input value="2026-03-03 18:00"></div>
+      <div class="col"><label>Ends</label><input value="2026-03-03 20:00"></div>
+    </div>
+    <div class="note">Four timestamps and one Status. Every Phase a student sees is
+    derived from these — nothing else is stored and nothing can drift.</div>
+  </div></div></div>
+
+  <div class="col"><div class="win"><div class="cap">Published · what locks, and when</div><div class="body">
+    <span class="pill p-ok">Published</span> <span class="pill p-mut">Phase · Registration Open</span>
+    <table style="margin-top:12px">
+      <tr><th>Field</th><th>Editable now?</th></tr>
+      <tr><td>Title, description</td><td><span class="pill p-ok">Yes</span></td></tr>
+      <tr><td>Timestamps, venue</td><td><span class="pill p-ok">Until it starts</span></td></tr>
+      <tr><td>Capacity</td><td><span class="pill p-warn">Raise only</span></td></tr>
+      <tr><td>Registration form</td><td><span class="pill p-bad">Locked — 28 registered</span></td></tr>
+      <tr><td>Un-publish</td><td><span class="pill p-bad">Never</span></td></tr>
+    </table>
+    <div class="note">Raising capacity from 40 to 50 promotes 4 waiting students
+    <em>immediately</em> — same atomic operation as a withdrawal, different trigger.
+    The officer must be told that before they click.</div>
+  </div></div></div>
+</div>
+
+<div class="q"><b>Reaction wanted</b>
+  “Registration form locked — 28 people already registered” is the rule most likely to
+  annoy a real officer. Is a plain lock right, or should label-only typo fixes be allowed?
+  Allowing them means one more rule; forbidding them means live typos.
+</div>
+
+<h2>2 · Booking a Venue — and losing the race</h2>
+<div class="row">
+  <div class="col"><div class="win"><div class="cap">Venue day · Sports Hall 2, 3 Mar</div><div class="body">
+    <div class="tl">
+      <div class="free" style="flex:2">09–11 free</div>
+      <div class="taken" style="flex:2">11–13 Yoga Soc</div>
+      <div class="free" style="flex:3">13–16 free</div>
+      <div class="taken" style="flex:2">16–18 Fencing</div>
+      <div class="free" style="flex:2">18–20 free</div>
+    </div>
+    <p class="hint" style="margin-top:8px">Half-open slots: 16:00–18:00 and 18:00–20:00 do
+    <strong>not</strong> collide. Consecutive bookings are legal.</p>
+    <label>Your slot</label><input value="18:00 – 20:00">
+    <button class="btn b-pri" style="margin-top:10px">Book Sports Hall 2</button>
+  </div></div></div>
+
+  <div class="col"><div class="win"><div class="cap">Booking · lost the atomic write</div><div class="body">
+    <span class="pill p-bad">Slot no longer free</span>
+    <p style="font-size:13px;margin:10px 0 0">Debating Society booked 17:30–19:00 in Sports
+    Hall 2 a moment ago. Your event is unchanged and still has no venue.</p>
+    <div class="tl">
+      <div class="free" style="flex:3">…</div>
+      <div class="clash" style="flex:3">17:30–19:00 taken</div>
+      <div class="free" style="flex:2">19–20 free</div>
+    </div>
+    <button class="btn b-sec" style="margin-top:11px">Pick another slot</button>
+    <button class="btn b-sec" style="margin-top:11px">Choose another venue</button>
+    <div class="note">The overlap predicate <em>is</em> the guard on the write, so there is
+    no window where both bookings exist. The officer sees a clean refusal, never a
+    double-booked room.</div>
+  </div></div></div>
+</div>
+
+<div class="q"><b>Reaction wanted</b>
+  Rescheduling takes the new slot before releasing the old, so a failure mid-way leaves the
+  club holding two rooms. Should the console surface that (“you are holding 2 slots — release
+  the old one”) or clean it silently on next view?
+</div>
+
+<h2>3 · Watching it fill</h2>
+<div class="win"><div class="cap">Event · Intro to Climbing · live</div><div class="body">
+  <div class="grid">
+    <div class="kpi"><b>40/40</b><span>Seats taken</span></div>
+    <div class="kpi"><b>4</b><span>Waiting</span></div>
+    <div class="kpi"><b>6</b><span>Promoted so far</span></div>
+    <div class="kpi"><b>3</b><span>Withdrawals</span></div>
+  </div>
+  <table style="margin-top:14px">
+    <tr><th>Student</th><th>Year</th><th>T-shirt</th><th>Joined</th><th>Route in</th></tr>
+    <tr><td>A. Byrne</td><td>2nd</td><td>M</td><td>20 Feb 09:01</td><td><span class="pill p-ok">Direct</span></td></tr>
+    <tr><td>C. Okafor</td><td>1st</td><td>L</td><td>20 Feb 09:01</td><td><span class="pill p-ok">Direct</span></td></tr>
+    <tr><td>M. Lynch</td><td>3rd</td><td>S</td><td>24 Feb 14:22</td><td><span class="pill p-wait">Promoted</span></td></tr>
+    <tr><td colspan="5" style="color:#6b7280">…37 more</td></tr>
+  </table>
+  <p style="margin-top:12px">
+    <button class="btn b-sec">Export answers (CSV)</button>
+    <button class="btn b-sec">Raise capacity</button>
+    <button class="btn b-dan">Cancel event</button>
+  </p>
+  <div class="note"><b>“Promoted so far” is the field the dashboard forced into the Seat
+  Ledger.</b> Without <code>promotedCount</code>, M. Lynch is indistinguishable from a direct
+  registration the moment they leave the waitlist, and waitlist conversion is uncomputable.</div>
+</div></div>
+
+<h2>4 · Running the door</h2>
+<div class="row">
+  <div class="col"><div class="win"><div class="cap">Door screen · projected</div><div class="body">
+    <div style="display:flex;gap:16px;align-items:center">
+      <div class="qr"></div>
+      <div>
+        <div style="font-size:38px;font-weight:700;line-height:1">23<span
+          style="font-size:19px;color:#6b7280"> / 40</span></div>
+        <div style="font-size:12px;color:#6b7280">checked in · live</div>
+        <div style="margin-top:9px"><span class="pill p-mut">Code refreshes in 41s</span></div>
+      </div>
+    </div>
+    <div class="note">The count is one-way, one event, seconds of latency — pushed over
+    WebSocket with an in-app broadcast. Single instance only; the ADR says so plainly.</div>
+  </div></div></div>
+
+  <div class="col"><div class="win"><div class="cap">Door · manual override</div><div class="body">
+    <label>Mark present</label><input value="Search enrolled students…">
+    <table style="margin-top:10px">
+      <tr><th>Student</th><th>Status</th><th></th></tr>
+      <tr><td>R. Nolan</td><td><span class="pill p-ok">Scanned 18:04</span></td><td></td></tr>
+      <tr><td>S. Kaur</td><td><span class="pill p-warn">Manual 18:09</span></td><td></td></tr>
+      <tr><td>T. Adeyemi</td><td><span class="pill p-mut">Not in</span></td>
+          <td><button class="btn b-sec">Mark present</button></td></tr>
+      <tr><td>W. Chen</td><td><span class="pill p-wait">Waitlist</span></td>
+          <td><button class="btn b-dis">No seat</button></td></tr>
+    </table>
+    <div class="note">Manual and scanned never look the same. A club whose attendance is
+    mostly manual has not demonstrated attendance, and the dashboard will say so.</div>
+  </div></div></div>
+</div>
+
+<h2>5 · Reading it back</h2>
+<div class="win"><div class="cap">Dashboard · Mountaineering Club</div><div class="body">
+  <div class="grid">
+    <div class="kpi"><b>95%</b><span>Fill rate<br>enrolled / capacity</span></div>
+    <div class="kpi"><b>78%</b><span>Attendance rate<br>attended / <b>enrolled</b></span></div>
+    <div class="kpi"><b>60%</b><span>Waitlist conversion<br>promoted / ever queued</span></div>
+    <div class="kpi"><b>9%</b><span>Manual override share</span></div>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <div class="col">
+      <p class="hint" style="font-weight:600;color:#14161a">Enrolled vs attended, last 6 events</p>
+      <div class="bars">
+        <div style="height:80%"><i style="height:70%"></i></div>
+        <div style="height:100%"><i style="height:82%"></i></div>
+        <div style="height:65%"><i style="height:60%"></i></div>
+        <div style="height:95%"><i style="height:55%"></i></div>
+        <div style="height:100%"><i style="height:90%"></i></div>
+        <div style="height:70%"><i style="height:64%"></i></div>
+      </div>
+      <p class="hint">Pale = enrolled, solid = attended. Event 4 filled and then half of
+      them did not turn up — the exact failure the denominator choice makes visible.</p>
+    </div>
+    <div class="col">
+      <p class="hint" style="font-weight:600;color:#14161a">Unmet demand</p>
+      <table>
+        <tr><th>Event</th><th>Capacity</th><th>Never got in</th></tr>
+        <tr><td>Intro to Climbing</td><td>40</td><td><span class="pill p-warn">4</span></td></tr>
+        <tr><td>Night Bouldering</td><td>25</td><td><span class="pill p-bad">19</span></td></tr>
+        <tr><td>Gear Workshop</td><td>30</td><td>0</td></tr>
+      </table>
+      <div class="note">Night Bouldering wanted a bigger room. This table is the argument
+      for next term's venue booking — the dashboard earns its place by being actionable,
+      not by having charts.</div>
+    </div>
+  </div>
+</div></div>
+
+<div class="q"><b>Reaction wanted</b>
+  Four KPIs, two charts, one table. Is that the right density, or should the officer view
+  drop to two KPIs and push the rest to the University Admin's cross-club view?
+</div>
+
+</body>
+</html>

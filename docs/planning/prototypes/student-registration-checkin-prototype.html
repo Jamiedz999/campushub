@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CampusHub — Student registration &amp; check-in prototype</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#14161a;--mut:#6b7280;--line:#e3e5e9;
+        --ok:#0f7b4f;--okbg:#e8f5ee;--warn:#8a5a00;--warnbg:#fdf3e0;
+        --bad:#a4262c;--badbg:#fdecec;--wait:#3b4ea8;--waitbg:#eaeefb;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:28px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 24px;font-size:13px;max-width:70ch}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);
+     margin:32px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+  .phone{width:280px;background:var(--card);border:1px solid var(--line);
+         border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .cap{font-size:11px;font-weight:600;color:var(--mut);background:#eceef1;
+       padding:6px 12px;border-bottom:1px solid var(--line)}
+  .body{padding:14px}
+  .ttl{font-weight:650;font-size:16px;margin:0 0 2px}
+  .meta{color:var(--mut);font-size:12.5px;margin:0 0 12px}
+  .pill{display:inline-block;font-size:11.5px;font-weight:650;padding:3px 9px;
+        border-radius:99px;margin-bottom:10px}
+  .p-ok{background:var(--okbg);color:var(--ok)} .p-warn{background:var(--warnbg);color:var(--warn)}
+  .p-bad{background:var(--badbg);color:var(--bad)} .p-wait{background:var(--waitbg);color:var(--wait)}
+  .p-mut{background:#eceef1;color:var(--mut)}
+  .bar{height:6px;background:#e8eaee;border-radius:99px;overflow:hidden;margin:8px 0 6px}
+  .bar i{display:block;height:100%;background:var(--ok)}
+  .bar.full i{background:var(--bad)}
+  .btn{display:block;width:100%;text-align:center;padding:10px;border-radius:9px;
+       font-weight:650;font-size:14px;border:0;margin-top:10px}
+  .b-pri{background:#14161a;color:#fff} .b-sec{background:#eceef1;color:var(--ink)}
+  .b-dis{background:#f0f1f3;color:#aeb3bb} .b-dan{background:var(--badbg);color:var(--bad)}
+  label{display:block;font-size:12.5px;font-weight:600;margin:12px 0 4px}
+  .req{color:var(--bad)}
+  input,select,textarea{width:100%;padding:8px;border:1px solid var(--line);
+       border-radius:7px;font:inherit;font-size:13px;background:#fcfcfd}
+  .hint{font-size:11.5px;color:var(--mut);margin-top:3px}
+  .err{font-size:11.5px;color:var(--bad);margin-top:3px;font-weight:600}
+  .qr{width:150px;height:150px;margin:14px auto;border-radius:10px;
+      background:repeating-conic-gradient(#14161a 0 25%,#fff 0 50%) 0 0/16px 16px;
+      border:6px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .big{font-size:34px;font-weight:700;text-align:center;margin:6px 0 0}
+  .cnt{text-align:center;color:var(--mut);font-size:12px}
+  .note{background:#fffbe8;border:1px solid #f0e2b0;border-radius:8px;
+        padding:9px 11px;font-size:12px;margin:10px 0 0;color:#6b5a1e}
+  .q{background:#eef1ff;border:1px solid #ccd5f5;border-radius:8px;padding:11px 13px;
+     font-size:13px;margin:12px 0 0;max-width:76ch}
+  .q b{display:block;margin-bottom:3px}
+  ol{margin:6px 0 0 18px;padding:0} li{margin:3px 0;font-size:13px}
+</style>
+</head>
+<body>
+
+<h1>Student registration &amp; check-in — throwaway prototype</h1>
+<p class="sub">Mobile surface, state gallery. Not code to keep. Its job is to expose flows that read badly
+<em>before</em> they are written as implementation Issues. Every screen below is a Phase or failure the
+resolved decisions actually produce.</p>
+
+<h2>1 · The Event page, across every Phase</h2>
+<div class="row">
+
+  <div class="phone"><div class="cap">Phase · Scheduled</div><div class="body">
+    <span class="pill p-mut">Registration opens 3 Mar</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">Mountaineering Club · 3 Mar, 18:00 · Sports Hall 2</p>
+    <div class="bar"><i style="width:0"></i></div>
+    <p class="hint">0 of 40 seats taken</p>
+    <button class="btn b-dis">Registration not open yet</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Phase · Registration Open</div><div class="body">
+    <span class="pill p-ok">12 seats left</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">Mountaineering Club · 3 Mar, 18:00 · Sports Hall 2</p>
+    <div class="bar"><i style="width:70%"></i></div>
+    <p class="hint">28 of 40 seats taken · closes 2 Mar, 23:59</p>
+    <button class="btn b-pri">Register</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Phase · Full</div><div class="body">
+    <span class="pill p-warn">Event full</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">Mountaineering Club · 3 Mar, 18:00 · Sports Hall 2</p>
+    <div class="bar full"><i style="width:100%"></i></div>
+    <p class="hint">40 of 40 seats taken · 4 people waiting</p>
+    <button class="btn b-pri">Join the waitlist</button>
+    <div class="note">Full is a Phase, not a stored state — one withdrawal and this
+    screen becomes Registration Open again with no job running.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Phase · Registration Closed</div><div class="body">
+    <span class="pill p-mut">Registration closed</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">Mountaineering Club · 3 Mar, 18:00 · Sports Hall 2</p>
+    <div class="bar"><i style="width:95%"></i></div>
+    <p class="hint">38 of 40 seats taken</p>
+    <button class="btn b-dis">Registration has closed</button>
+    <div class="note">Closed to <em>new</em> entrants only. The waitlist still promotes
+    into those 2 free seats.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Phase · Cancelled</div><div class="body">
+    <span class="pill p-bad">Cancelled</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">Mountaineering Club · 3 Mar, 18:00 · Sports Hall 2</p>
+    <p class="hint">This event was cancelled by the organiser.</p>
+    <button class="btn b-dis">Cancelled</button>
+    <div class="note">The Seat Ledger is frozen, not cleared — you can still see that
+    you had a seat.</div>
+  </div></div>
+
+</div>
+
+<div class="q"><b>Reaction wanted</b>
+  Does <em>“12 seats left”</em> beat <em>“28 of 40 taken”</em> as the headline? Scarcity drives
+  the registration this project is about, but the fraction is the honest number.
+  Currently both appear — pill for scarcity, caption for truth.
+</div>
+
+<h2>2 · Registering, with a form the frontend never saw at build time</h2>
+<div class="row">
+
+  <div class="phone"><div class="cap">Custom form · empty</div><div class="body">
+    <p class="ttl">Register</p>
+    <p class="meta">Intro to Climbing</p>
+    <label>Year of study <span class="req">*</span></label>
+    <select><option>Choose…</option><option>1st</option><option>2nd</option><option>3rd</option></select>
+    <label>T-shirt size <span class="req">*</span></label>
+    <select><option>Choose…</option><option>S</option><option>M</option><option>L</option></select>
+    <label>Any climbing experience?</label>
+    <textarea rows="2" placeholder="Optional"></textarea>
+    <p class="hint">Max 500 characters</p>
+    <button class="btn b-pri">Take my seat</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Custom form · validation</div><div class="body">
+    <p class="ttl">Register</p>
+    <p class="meta">Intro to Climbing</p>
+    <label>Year of study <span class="req">*</span></label>
+    <select style="border-color:#a4262c"><option>Choose…</option></select>
+    <p class="err">Required</p>
+    <label>T-shirt size <span class="req">*</span></label>
+    <select><option>M</option></select>
+    <button class="btn b-pri">Take my seat</button>
+    <div class="note">Client validation is generated from the same definition the server
+    validates against. The server's check is the one that counts.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">No form defined</div><div class="body">
+    <p class="ttl">Register</p>
+    <p class="meta">Weekly Board Games</p>
+    <p class="hint">This event has no questions.</p>
+    <button class="btn b-pri">Take my seat</button>
+    <div class="note">An empty form is valid — one tap, no empty step in the way.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Lost the race</div><div class="body">
+    <p class="ttl">Register</p>
+    <p class="meta">Intro to Climbing</p>
+    <span class="pill p-warn">The last seat just went</span>
+    <p class="hint">Somebody took it while you were filling this in. Your answers are
+    still here.</p>
+    <button class="btn b-pri">Join the waitlist instead</button>
+    <div class="note">This is the atomic write returning null, then one follow-up read
+    to say <em>why</em>. Answers must survive the failure or the form is a punishment.</div>
+  </div></div>
+
+</div>
+
+<div class="q"><b>Reaction wanted</b>
+  On losing the race, should the answers be carried into the waitlist join, or discarded
+  until promotion? Carrying them means a Registration document exists for someone with no
+  Seat — which the decisions do not currently allow.
+</div>
+
+<h2>3 · Being on the waitlist, and being promoted</h2>
+<div class="row">
+
+  <div class="phone"><div class="cap">Waiting</div><div class="body">
+    <span class="pill p-wait">Waitlist · position 3</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">3 Mar, 18:00 · Sports Hall 2</p>
+    <p class="hint">You will be given a seat automatically if one frees up. Nothing to
+    confirm — just turn up if you get in.</p>
+    <button class="btn b-sec">Leave the waitlist</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Promoted</div><div class="body">
+    <span class="pill p-ok">You're in</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">3 Mar, 18:00 · Sports Hall 2</p>
+    <p class="hint">A seat freed up and it is yours. No action needed.</p>
+    <button class="btn b-sec">Withdraw</button>
+    <div class="note">No confirmation step by design. But with notifications out of
+    scope, the student only learns this <b>by opening the app</b>.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Enrolled, before the day</div><div class="body">
+    <span class="pill p-ok">Registered</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="meta">3 Mar, 18:00 · Sports Hall 2</p>
+    <p class="hint">Check-in opens 15 minutes before the start.</p>
+    <button class="btn b-sec">Withdraw</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Withdrew, re-registering</div><div class="body">
+    <span class="pill p-mut">Not registered</span>
+    <p class="ttl">Intro to Climbing</p>
+    <div class="bar full"><i style="width:100%"></i></div>
+    <p class="hint">40 of 40 · 5 waiting</p>
+    <button class="btn b-pri">Join the waitlist</button>
+    <div class="note">Re-joining goes to the tail. Worth saying out loud here, or it
+    feels like a bug.</div>
+  </div></div>
+
+</div>
+
+<div class="q"><b>Reaction wanted — the sharpest gap this prototype found</b>
+  Promotion is silent. Notifications are out of scope, so a student promoted the night
+  before an event finds out only if they happen to open the page. Three ways out:
+  <ol>
+    <li>Accept it. The dashboard still shows conversion; the story still works.</li>
+    <li>Add an in-app inbox — cheap, no email infrastructure, visible on next open.</li>
+    <li>Reinstate a confirmation step, which decision 04 deliberately rejected.</li>
+  </ol>
+</div>
+
+<h2>4 · The door</h2>
+<div class="row">
+
+  <div class="phone"><div class="cap">Scan · ready</div><div class="body">
+    <p class="ttl">Check in</p>
+    <p class="meta">Intro to Climbing</p>
+    <div class="qr"></div>
+    <p class="cnt">Point at the screen at the door</p>
+    <button class="btn b-pri">Open camera</button>
+  </div></div>
+
+  <div class="phone"><div class="cap">Scan · success</div><div class="body">
+    <span class="pill p-ok">Checked in</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="big">✓</p>
+    <p class="cnt">18:04 · Sports Hall 2</p>
+    <div class="note">Identity came from the session, presence from the code. Neither
+    half alone gets anyone in.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Failure · expired code</div><div class="body">
+    <span class="pill p-bad">Code expired</span>
+    <p class="ttl">Check in</p>
+    <p class="hint">That code has rotated. Scan the screen again — it changes every
+    minute.</p>
+    <button class="btn b-pri">Scan again</button>
+    <div class="note">The most common real failure, and the one that proves the
+    mechanism works. Wording must not read as an error.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Failure · not on the roster</div><div class="body">
+    <span class="pill p-bad">You're on the waitlist</span>
+    <p class="ttl">Check in</p>
+    <p class="hint">You were still waiting when this event started, so there is no seat
+    to check into. Speak to the organiser.</p>
+    <button class="btn b-dan">Can't check in</button>
+    <div class="note">Roster froze at start. This student turned up hopeful — the
+    wording has to be kind and point at a human.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Failure · already in</div><div class="body">
+    <span class="pill p-ok">Already checked in</span>
+    <p class="ttl">Intro to Climbing</p>
+    <p class="cnt">You checked in at 18:04</p>
+    <div class="note">Idempotent no-op, shown as reassurance rather than an error.</div>
+  </div></div>
+
+  <div class="phone"><div class="cap">Failure · no signal</div><div class="body">
+    <span class="pill p-warn">Couldn't reach CampusHub</span>
+    <p class="ttl">Check in</p>
+    <p class="hint">Check-in needs a connection. Try again, or ask the organiser to mark
+    you present.</p>
+    <button class="btn b-pri">Retry</button>
+    <div class="note">No offline queue in Core, so the fallback must be named on screen:
+    the manual override exists and the student should know to ask for it.</div>
+  </div></div>
+
+</div>
+
+<div class="q"><b>Reaction wanted</b>
+  Six door states, five of them failures. The door is the highest-stress moment in the
+  product — a queue of people behind you. Is “expired code” worth an automatic re-scan
+  rather than a button?
+</div>
+
+</body>
+</html>
