@@ -20,10 +20,10 @@ The work:
 
 ## Answer
 
-The queue exists: **[CH-020 through CH-031](implementation/ISSUE-WORKFLOW.md#the-queue)**, twelve dependency-ordered specs in [`issues/`](issues/), governed by [`ISSUE-WORKFLOW.md`](implementation/ISSUE-WORKFLOW.md).
+The queue exists as **[twelve GitHub Issues](https://github.com/Jamiedz999/campushub/issues)**, wired with native dependencies and governed by [`ISSUE-WORKFLOW.md`](implementation/ISSUE-WORKFLOW.md). Each Issue carries its full specification; this repository keeps the decisions they implement, not the instructions themselves.
 
 Every Issue names the decisions it implements, and every decision it names is resolved — the traceability check the ticket asked for found no Issue depending on a decision nobody made. Where implementation discovers otherwise, the workflow's rule applies: a missing decision goes back to the map as a ticket rather than being settled in a commit.
 
-**CH-020 is ready.** Everything else is blocked until its dependency is merged.
+**[#1](https://github.com/Jamiedz999/campushub/issues/1) is the only Issue with no open blockers.** Everything else waits on its dependency being merged.
 
 This ticket is the map's destination. Nothing remains to decide before building starts.

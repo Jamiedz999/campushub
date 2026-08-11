@@ -71,7 +71,7 @@ Venue slot booking is retained even though it is structurally the same problem B
 - [Define QR check-in and its anti-fraud properties](../adr/07-define-qr-checkin-and-anti-fraud.md) — the door displays a 60-second rotating HMAC code proving presence while the signed-in session proves identity; attendance joins the Seat Ledger, manual overrides stay distinguishable, and the threat model is stated honestly.
 - [Define the three roles and resource-level authorization](../adr/08-define-roles-and-resource-authorization.md) — Club Officer is a per-Club grant, ownership is enforced by scoping every query rather than checking after reading, and every rule in the matrix owes a negative test.
 - [Set the Core boundary and Sprint split](13-set-core-boundary-and-sprints.md) — five deployable Sprints of 10–12 hours, Core Acceptance gated on concurrency tests and a negative authorization test per matrix row, predicted at 7.5/8 gate and 7 bonus points.
-- [Draft the numbered implementation Issue queue](14-draft-implementation-issue-queue.md) — CH-020 through CH-031 exist and every Issue traces to a resolved decision; CH-020 is ready.
+- [Draft the numbered implementation Issue queue](14-draft-implementation-issue-queue.md) — the twelve Issues exist on GitHub and every one traces to a resolved decision; #1 is the only one with no open blockers.
 - [Lock the Core technical baseline](../adr/12-lock-core-technical-baseline.md) — server-side sessions, WebSocket with an in-process broadcast and no change streams or replica set, `MongoTemplate` only with no repository interfaces, Mongock owning every index, ECharts and Cypress. Operational reference: [`TECHNICAL-BASELINE.md`](implementation/TECHNICAL-BASELINE.md).
 - [Prototype the student registration and check-in experience](prototypes/10-prototype-student-registration-and-checkin.md) — exposed that promotion is silent with notifications out of scope; fixed by recording `via: DIRECT | PROMOTED` on each enrolled entry rather than by adding a confirmation step or notification infrastructure.
 - [Prototype the club officer console](prototypes/11-prototype-club-officer-console.md) — raising capacity needs an explicit warning that it admits waiting Students immediately, the editability rules only read as policy when shown as one table, and the unmet-demand table is what makes the dashboard worth opening twice.
@@ -81,7 +81,7 @@ Settled during charting, before any ticket existed (recorded in Notes above, not
 
 ## Destination reached
 
-**This map is complete.** Every Core decision is resolved and the implementation queue exists: [CH-020 through CH-031](implementation/ISSUE-WORKFLOW.md#the-queue), twelve dependency-ordered specs across five Sprints, governed by [`ISSUE-WORKFLOW.md`](implementation/ISSUE-WORKFLOW.md). **CH-020 is ready**; everything else is blocked until its dependency is merged.
+**This map is complete.** Every Core decision is resolved and the implementation queue exists as [twelve GitHub Issues](https://github.com/Jamiedz999/campushub/issues) across five Sprints, wired with native dependencies and governed by [`ISSUE-WORKFLOW.md`](implementation/ISSUE-WORKFLOW.md). [#1](https://github.com/Jamiedz999/campushub/issues/1) has no open blockers; every other Issue does.
 
 The two live planning documents are [the Sprint roadmap and Core Acceptance gate](13-set-core-boundary-and-sprints.md) and [`TECHNICAL-BASELINE.md`](implementation/TECHNICAL-BASELINE.md).
 

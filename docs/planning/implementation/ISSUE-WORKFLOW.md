@@ -4,13 +4,13 @@ Status: current
 
 ## What an Issue is
 
-An Issue spec in [`../issues/`](../issues/) is the authoritative statement of one increment: what changes, what must be true when it is done, and what tests prove it. Specs are files in this repository and are reviewed like code.
+**The GitHub Issue is the spec.** It states what changes, what must be true when it is done, and what tests prove it, in full. There is no spec file in this repository and no summary-plus-link pointer — an Issue is read where the work happens, and a reader should never have to click through to find out what to build.
 
-Each spec has one GitHub Issue carrying a one-paragraph summary and a link to the committed spec. **The spec never lives in the issue body.** The spec files carry `Sprint:` and `Area:`, which describe the work; nothing in them says where the work stands.
+Each Issue names the Sprint it belongs to, the modules it touches, and the decisions it implements as absolute links into `docs/adr/` and `docs/planning/`. Titles are written plainly, with no prefix. The `0NN` numbers that survive in the footers order the original drafting and carry no other meaning.
 
-Issue titles are written plainly, with no `CH-0NN` prefix. The local `0NN` numbering orders the spec files and nothing else.
+**What stays in this repository is the durable thinking**: the ADRs, the domain glossary, the technical baseline, the Sprint roadmap and the map. Those are reasoned positions with reasons attached, they are cross-referenced, and they belong under version control. Implementation Issues are perishable execution instructions, and they belong in the tracker.
 
-Spec links point at `blob/main/`, not at a commit SHA. A SHA-pinned link freezes a spec at the moment the issue was filed, so an amended spec would silently keep serving the superseded text — and every such link breaks if history is ever rewritten. The spec is a living document and the issue should show its current state.
+The cost of that split, named rather than hidden: **an Issue amendment gets no `git diff`.** Amendment is normal here — three decisions were corrected during planning alone — so a material change to an Issue is recorded as a comment on it saying what changed and why. When the change originates in a decision, the reasoning lives in that ADR's amendment, which *is* under version control.
 
 ## Where execution state lives
 
@@ -54,20 +54,20 @@ Implementation regularly discovers what planning could not. When it does:
 
 ## The queue
 
-| Issue | Spec | Sprint | Blocked by |
-|---|---|---:|---|
-| [#1 Scaffold the full-stack walking skeleton](https://github.com/Jamiedz999/campushub/issues/1) | [`020`](../issues/020-scaffold-full-stack-walking-skeleton.md) | 1 | — |
-| [#2 Add sign-in, roles and Club grants](https://github.com/Jamiedz999/campushub/issues/2) | [`021`](../issues/021-add-signin-roles-and-club-grants.md) | 1 | #1 |
-| [#3 Add the Event document, lifecycle and browse](https://github.com/Jamiedz999/campushub/issues/3) | [`022`](../issues/022-add-event-lifecycle-and-browse.md) | 1 | #2 |
-| [#4 Add the Seat Ledger — registration and capacity](https://github.com/Jamiedz999/campushub/issues/4) | [`023`](../issues/023-add-seat-ledger-registration-and-capacity.md) | 2 | #3 |
-| [#5 Add the Waitlist, withdrawal and promotion](https://github.com/Jamiedz999/campushub/issues/5) | [`024`](../issues/024-add-waitlist-withdrawal-and-promotion.md) | 2 | #4 |
-| [#6 Add per-Event custom registration forms](https://github.com/Jamiedz999/campushub/issues/6) | [`025`](../issues/025-add-custom-registration-forms.md) | 3 | #5 |
-| [#7 Add Venues and Slot booking](https://github.com/Jamiedz999/campushub/issues/7) | [`026`](../issues/026-add-venues-and-slot-booking.md) | 3 | #3 |
-| [#8 Add QR check-in and attendance](https://github.com/Jamiedz999/campushub/issues/8) | [`027`](../issues/027-add-qr-checkin-and-attendance.md) | 4 | #5, #7 |
-| [#9 Add the live attendee count over WebSocket](https://github.com/Jamiedz999/campushub/issues/9) | [`028`](../issues/028-add-live-attendee-count.md) | 4 | #8 |
-| [#10 Build the attendance dashboard](https://github.com/Jamiedz999/campushub/issues/10) | [`029`](../issues/029-build-attendance-dashboard.md) | 5 | #8 |
-| [#11 Harden the Core with risk-based evidence](https://github.com/Jamiedz999/campushub/issues/11) | [`030`](../issues/030-harden-core-with-risk-based-evidence.md) | 5 | #9, #10 |
-| [#12 Package the portfolio release](https://github.com/Jamiedz999/campushub/issues/12) | [`031`](../issues/031-package-portfolio-release.md) | 5 | #11 |
+| Issue | Sprint | Blocked by |
+|---|---:|---|
+| [#1 Scaffold the full-stack walking skeleton](https://github.com/Jamiedz999/campushub/issues/1) | 1 | — |
+| [#2 Add sign-in, roles and Club grants](https://github.com/Jamiedz999/campushub/issues/2) | 1 | #1 |
+| [#3 Add the Event document, lifecycle and browse](https://github.com/Jamiedz999/campushub/issues/3) | 1 | #2 |
+| [#4 Add the Seat Ledger — registration and capacity](https://github.com/Jamiedz999/campushub/issues/4) | 2 | #3 |
+| [#5 Add the Waitlist, withdrawal and promotion](https://github.com/Jamiedz999/campushub/issues/5) | 2 | #4 |
+| [#6 Add per-Event custom registration forms](https://github.com/Jamiedz999/campushub/issues/6) | 3 | #5 |
+| [#7 Add Venues and Slot booking](https://github.com/Jamiedz999/campushub/issues/7) | 3 | #3 |
+| [#8 Add QR check-in and attendance](https://github.com/Jamiedz999/campushub/issues/8) | 4 | #5, #7 |
+| [#9 Add the live attendee count over WebSocket](https://github.com/Jamiedz999/campushub/issues/9) | 4 | #8 |
+| [#10 Build the attendance dashboard](https://github.com/Jamiedz999/campushub/issues/10) | 5 | #8 |
+| [#11 Harden the Core with risk-based evidence](https://github.com/Jamiedz999/campushub/issues/11) | 5 | #9, #10 |
+| [#12 Package the portfolio release](https://github.com/Jamiedz999/campushub/issues/12) | 5 | #11 |
 
 **[#1](https://github.com/Jamiedz999/campushub/issues/1) has no open blockers. Everything else does — check the graph, not this table, which is a map of intent and can fall behind.**
 
