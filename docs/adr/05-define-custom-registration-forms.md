@@ -35,6 +35,14 @@ The server validates every submitted answer set against the Event's own form def
 
 The client validates from the same definition for feedback only. **The server's check is the one that counts**, and it is not skippable by a crafted request.
 
+**Amendment — what happens when the answers write fails after the Seat is won.** [The registration decision](04-define-registration-capacity-and-waitlist.md) accepts that the answers are a second, non-atomic write, and calls the resulting state "detectable, repairable, and irrelevant to who got the Seat". It never said how it is detected or who repairs it, which left an accepted inconsistency with no user-visible handling — the worst kind, because it looks decided.
+
+**The Seat stands.** It is the authoritative outcome and the Student holds it; failing the whole request to keep the two writes in step would throw away the only part that was contended. The response reports the registration as succeeded and flags the answers as unsaved, the Student's own event list shows the Registration as incomplete with a retry that writes only the answers, and the officer's answers table distinguishes an unsaved Registration from one whose optional fields are genuinely empty.
+
+Validation therefore runs **before** the Seat write, not after: a form that would be rejected should never consume a Seat. What can still fail afterwards is the write itself, not the content.
+
+This is repair by making the state visible to the one person motivated to fix it, rather than by a reconciliation sweep — which remains Future Work, and which would be a safety net over a mechanism that already tells someone.
+
 ### The form locks once the first Registration exists
 
 While an Event has no Registrations, its form is freely editable. From the first Registration onward, **the form definition is immutable**.

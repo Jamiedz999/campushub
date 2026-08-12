@@ -83,6 +83,12 @@ The University Admin role keeps real authority without it — Venues are theirs 
 - **Capacity may be raised, never lowered.** Lowering it would have to evict enrolled Students, and there is no fair rule for choosing them. **Raising it promotes from the Waitlist immediately**, as many as now fit, in the one atomic pipeline update the registration decision already defines — the same mechanism as a withdrawal, triggered differently.
 - **Capacity is required and finite.** An unlimited Event would make the Seat Ledger vacuous and the Waitlist dead code, and the Waitlist is this project's flagship behaviour.
 - **From `startsAt`** — the Seat Ledger is frozen as the Roster, and the timestamps become immutable.
+
+**Amendment — Capacity freezes at `startsAt` too, and the freeze is a guard rather than a convention.** As first written, this section said timestamps become immutable from `startsAt` and said nothing about Capacity. That left Capacity raisable a minute after the Event began, which would promote Students from the Waitlist into a Roster this same section calls frozen — the two rules contradicted each other and the second one silently lost.
+
+**Capacity is immutable from `startsAt`**, alongside the timestamps. And the freeze is not a rule the application remembers to honour: **`startsAt: { $gt: now }` is part of the filter on every Seat Ledger write** — taking a Seat, joining the Waitlist, withdrawing, promoting and raising Capacity alike. A freeze that lives only in prose is enforced by whoever writes the next caller; a freeze that lives in the guard cannot be forgotten, which is the same argument [the authorization decision](08-define-roles-and-resource-authorization.md) makes for scoping queries.
+
+Check-in is the one write that is deliberately outside this rule — it exists to happen after `startsAt`, and it carries its own window and its own Roster check.
 - **From `endsAt`** — the Event is fully immutable.
 - The registration form locks once the first Registration exists. That rule belongs to the forms decision; it is named here only so the immutability picture is complete.
 

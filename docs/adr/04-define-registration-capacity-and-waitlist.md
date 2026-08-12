@@ -59,6 +59,12 @@ Withdrawal removes the student from `enrolled` **and** moves the head of `waitli
 
 The same update increments a **`promotedCount`** on the Event. That field was added by [the dashboard decision](09-define-attendance-dashboard.md), which needs it to compute Waitlist conversion — a promoted Student leaves `waitlist` and is otherwise unrecoverable. One integer, written in the operation that already exists.
 
+**Amendment — `promotedCount` alone cannot count everyone who queued, so an `everQueuedCount` joins it.** The dashboard defined Waitlist conversion as `promotedCount / (promotedCount + waitlist length)`, and the implementation Issue asserted as an acceptance criterion that those two terms add up to everyone who ever queued. **They do not.** A Student who joins the Waitlist and later leaves it is removed from `waitlist` by the plain `$pull` this decision specifies below, and was never counted in `promotedCount` — so the moment anyone abandons the queue, both the invariant and the conversion denominator are wrong, and wrong in the flattering direction.
+
+**The Event carries an `everQueuedCount`, incremented in the same guarded write that appends to `waitlist`.** Conversion becomes `promotedCount / everQueuedCount`. Like `promotedCount` it is one integer on a write that already happens, and unlike the arithmetic it replaces it survives people changing their minds.
+
+The alternative — keeping departed Students in `waitlist` with a tombstone flag — was rejected: the queue is read on the promotion path, and putting entries in it that must be skipped makes the ordered `$slice` that moves the head into `enrolled` conditional, which is precisely the operation this design keeps unconditional.
+
 This is the payoff of the Seat Ledger. The classic failure of a scheduled-sweep design — two overlapping sweeps promoting two students into one freed Seat — **cannot occur**, because there is no window between freeing and filling.
 
 Consequences:
@@ -72,7 +78,7 @@ Consequences:
 - **Withdrawal is permitted until the Event starts.** The later withdrawal stays open, the more the Waitlist actually turns over — and Waitlist turnover is the feature this project is built to show.
 - **A withdrawn student may register again, and returns to the tail of the queue.** Restoring a former position would mean storing position history, which is state that exists only to serve an edge case.
 - **After registration closes, promotion continues; new registrations stop.** Closing means "no new entrants", not "stop filling empty Seats" — filling them is the entire point of holding a queue.
-- **When the Event starts, the Seat Ledger freezes.** From that moment `enrolled` is the definitive roster the door checks against, which is the input the QR check-in decision consumes.
+- **When the Event starts, the Seat Ledger freezes.** From that moment `enrolled` is the definitive roster the door checks against, which is the input the QR check-in decision consumes. **The freeze is carried in the filter — `startsAt: { $gt: now }` is part of every Seat Ledger write**, including a Capacity raise; [the lifecycle decision](03-define-event-lifecycle.md) holds that amendment. Check-in is the sole exception, since it exists to happen after `startsAt`.
 - **The Waitlist is never cleared after the Event ends.** It is the evidence of demand and feeds the dashboard's Waitlist-conversion metric.
 - **Idempotency.** The `$ne` guards make a repeated or double-clicked registration a no-op that reports "already registered" rather than an error, and make double promotion impossible.
 

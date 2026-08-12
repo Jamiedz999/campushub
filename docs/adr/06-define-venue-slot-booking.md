@@ -42,6 +42,12 @@ Times are stored as **minutes from midnight** alongside the date, which keeps a 
 
 **An Event may not span midnight.** A crossing booking would touch two Venue-Day documents and reintroduce the multi-document write this model exists to avoid. The constraint is honest for campus events and is stated as a validation rule, not worked around.
 
+**Amendment — the projection is lossy for one hour on two days a year, and those Slots are refused.** This section said minutes from midnight keeps a day's arithmetic "away from timezone handling". That is true of the arithmetic and false of the projection: turning an instant into `(date, minuteOfDay)` requires a timezone, and [the API and time contract](15-define-http-api-and-time-contract.md) settles it as `Europe/Dublin`, which observes daylight saving.
+
+On the autumn transition the local hour `[01:00, 02:00)` occurs **twice**, so two bookings an hour apart in real time project onto identical `(date, minuteOfDay)` pairs and the overlap guard cannot tell them apart. On the spring transition that same local hour does **not exist**, and a naive conversion moves a time silently forward by an hour.
+
+**A Slot may not intersect `[01:00, 02:00)` local on a daylight-saving transition date**, refused in validation with `SLOT_IN_DST_TRANSITION` and covered by fixed-clock tests on both dates. Rejected: storing each booking's UTC offset, which puts timezone arithmetic back inside the `$elemMatch` guard this model exists to keep simple. Both constraints — no crossing midnight, no crossing a transition — are the same price paid for the same atomicity, and naming the second is what stops the first from looking like the only one.
+
 ### Ordering rule: acquire before releasing
 
 Rescheduling an Event means taking a new Slot and releasing the old one — two writes, possibly on two documents.

@@ -21,13 +21,15 @@ This is the single implementation source for the Core stack, repository shape an
 | Charts | Apache ECharts via `echarts-for-react` |
 | Realtime | Spring WebSocket (STOMP-free, raw `WebSocketHandler`) with an **in-process broadcast**. No MongoDB change streams |
 | Verification | JUnit 5, AssertJ, Mockito, Testcontainers MongoDB, Vitest, Testing Library, **Cypress** |
-| Quality gates | JaCoCo ≥ 90% backend, Vitest ≥ 90% frontend global, Checkstyle, SpotBugs, ESLint, all failing the build |
+| Quality gates | **JaCoCo ≥ 90% line and branch** backend, Vitest ≥ 90% frontend global, Checkstyle, SpotBugs, ESLint, all failing the build |
 | Packaging | Docker Compose for local MongoDB; one multi-stage image containing the Boot app and the compiled React assets |
 | Operations | Actuator health, request correlation, redacted logs. No monitoring platform in Core |
 
 Versions are pinned in lock and build files by the scaffold Issue. A later patch update is allowed only in its own dependency PR with the full verification suite green; it does not reopen this decision.
 
 **Deployment target is an environment input, not a Core decision.** Host, hostname, secrets and whether MongoDB is a container or a managed free tier are supplied at the release Issue. Nothing before that Issue may block on them.
+
+**The application stays host-agnostic** so that the release Issue can pick any target without rework: one container, configuration through environment variables — `MONGODB_URI` above all — and no dependency on a platform-specific capability. Because the public URL does not exist until the release Issue, deployment is also the one part of Core carrying no incremental evidence, and keeping the surface this narrow is what limits that exposure.
 
 ## Repository shape
 
@@ -90,9 +92,27 @@ Redis, Kafka, change streams, replica sets, PostGIS, WebFlux, microservices and 
 
 - **`MongoTemplate` is the only persistence API. There are no Spring Data repository interfaces.** Every operation that matters here is a guarded conditional update or an aggregation — `findAndModify` with a filter, an aggregation-pipeline update, an `$elemMatch` overlap guard — and derived repository methods cannot express any of them. Offering two routes to the database would invite the important operations to be written the wrong way. `spring-boot-starter-data-mongodb` remains the dependency that provides `MongoTemplate`.
 - **Every contended write is one `findAndModify` with its guard in the filter.** No read-then-write, no application-side compare-and-set, no locks.
-- **Mongock owns all indexes**, including the unique index on `(venueId, date)` and the unique index on `(eventId, studentId)` for Registrations. Index creation is never inferred from annotations at runtime.
+- **Mongock owns all indexes**, including the unique index on `(venueId, date)`, the unique index on `(eventId, studentId)` for Registrations, and the text index over Event `title` and `description`. Index creation is never inferred from annotations at runtime. The text index is the only one serving a read path rather than a correctness guarantee, and is annotated as such where it is defined.
 - **`now` always comes from the injected `Clock`** and is passed into queries as a value. Server time is authoritative; client time is never trusted for anything.
+- **`startsAt: { $gt: now }` is part of the filter on every Seat Ledger write** — registration, Waitlist join, withdrawal, promotion and Capacity raise. Check-in is the sole exception. The Roster freeze is a guard, not a convention.
 - MongoDB runs as a **single node**. No Core operation uses a multi-document transaction, so no replica set is required. Introducing one would be a change to this document, not a local decision.
+
+## API and time contract
+
+Full reasoning in [ADR 15](../../adr/15-define-http-api-and-time-contract.md); discovery specifics in [ADR 16](../../adr/16-define-event-discovery.md). Binding for every Issue:
+
+| Concern | Contract |
+|---|---|
+| Identifiers | The 24-character hex string form of a MongoDB `ObjectId`. Opaque to the frontend |
+| Errors | `application/problem+json` (RFC 9457) with a stable **`code`** extension member. The frontend switches on `code`, never on `detail` or on status alone |
+| Authorization failure | **`404` with `code: NOT_FOUND`, never `403`** — ownership is enforced by scoping the query, so the resource genuinely is not found |
+| Collections | `{ items, page, size, total }`. Zero-indexed `page`, `size` default 20, hard cap 100 |
+| Paths | Plural nouns under `/api`. Non-CRUD state changes are named sub-resources, never verbs |
+| Payloads | `camelCase`, field names matching [`CONTEXT.md`](../../../CONTEXT.md). Role-specific DTOs |
+| Stored time | UTC instants. ISO-8601 with offset on the wire |
+| Campus timezone | **`Europe/Dublin`**, one configured constant injected wherever a calendar value is derived — never hardcoded, never taken from a request |
+| Slot validation | No Slot may cross midnight, and **no Slot may intersect `[01:00, 02:00)` local on a daylight-saving transition date**, where the Venue-Day projection is lossy |
+| Secrets | `MONGODB_URI`, the session secret and the check-in HMAC secret are configuration with no production default. The HMAC secret has a development default only |
 
 ## Web and realtime rules
 
@@ -125,6 +145,8 @@ docker compose down
 ```
 
 `npm run check` runs TypeScript checking, Vitest once with coverage, and a production build. `mvnw verify` runs Checkstyle, SpotBugs, the tests and the JaCoCo gate. Cypress runs as its own CI job against the composed stack, introduced by the Issue that first needs it.
+
+**The coverage gate is 90% from the scaffold Issue onward and is never lowered.** It is not raised gradually and it is not retrofitted: a gate that arrives late is a gate that arrives after the untested code, and the only way to meet it then is padding. Counting is **JaCoCo line and branch**, both at 90%. The only permitted exclusions are `**/config/**`, `**/*Application.class`, and DTO/record types with no behaviour; any exclusion beyond those is named and justified in the pull request that adds it. If the gate blocks, the tests are missing — that is the gate working.
 
 ## Explicitly absent from Core
 
