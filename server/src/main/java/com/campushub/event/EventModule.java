@@ -20,6 +20,14 @@ import java.util.Set;
 // command has no existing resource to scope a query by (isOfficerOf the target Club).
 public interface EventModule {
 
+    /** Stable outcomes of deleting the signed-in Student's registration sub-resource. */
+    enum WithdrawalOutcome {
+        SUCCESS,
+        NOT_FOUND,
+        EVENT_CANCELLED,
+        EVENT_STARTED
+    }
+
     /** Creates a Draft in {@code clubId} and returns its id. The caller must already be that Club's Officer. */
     String createDraft(
             String clubId,
@@ -64,6 +72,9 @@ public interface EventModule {
      * docs/adr/04-define-registration-capacity-and-waitlist.md. Correctness lives entirely in the write.
      */
     RegistrationOutcome register(String eventId, String studentId);
+
+    /** Withdraws the Student from a held Seat or the Waitlist, until the Event starts. */
+    WithdrawalOutcome withdraw(String eventId, String studentId);
 
     /** The Student's "my events": every Event, whatever its Status, where they hold a Seat. */
     EventPage findEnrolled(String studentId, int page, int size);

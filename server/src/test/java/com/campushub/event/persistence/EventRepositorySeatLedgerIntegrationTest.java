@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.campushub.event.domain.EnrolledEntry;
 import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
+import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventStatus;
 import com.mongodb.client.MongoClients;
@@ -108,6 +109,124 @@ class EventRepositorySeatLedgerIntegrationTest {
         assertThat(repository.findById(id).orElseThrow().getEnrolled())
                 .extracting(EnrolledEntry::studentId)
                 .containsExactly("student-1");
+    }
+
+    @Test
+    void joinWaitlistAppendsTheStudentAndCountsTheJoinInTheSameWrite() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+
+        boolean joined = repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+
+        assertThat(joined).isTrue();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getWaitlist()).containsExactly("student-2");
+        assertThat(event.getEverQueuedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void aStudentWhoJoinsLeavesAndJoinsAgainCountsBothJoinsInConversion() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+
+        assertThat(repository.leaveWaitlist(id, "student-2", WITHIN_WINDOW.plusSeconds(1)))
+                .isTrue();
+        assertThat(repository.joinWaitlist(id, "student-2", WITHIN_WINDOW.plusSeconds(2)))
+                .isTrue();
+        assertThat(repository.withdrawEnrolled(id, "student-1", WITHIN_WINDOW.plusSeconds(3)))
+                .isTrue();
+
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getWaitlist()).isEmpty();
+        assertThat(event.getEnrolled())
+                .containsExactly(new EnrolledEntry(
+                        "student-2", EnrollmentVia.PROMOTED, WITHIN_WINDOW.plusSeconds(3)));
+        assertThat(event.getEverQueuedCount()).isEqualTo(2);
+        assertThat(event.getPromotedCount()).isEqualTo(1);
+        assertThat(event.waitlistConversion()).isEqualTo(0.5);
+    }
+
+    @Test
+    void raisingCapacityPromotesAsManyWaitingStudentsAsNowFitInTheSameWrite() {
+        String id = publishedEvent(2);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.takeSeat(id, "student-2", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-3", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-4", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-5", WITHIN_WINDOW);
+        EventEdit raiseCapacity = new EventEdit(null, null, null, null, null, null, 4);
+
+        boolean raised = repository.edit(id, Set.of("club-a"), raiseCapacity, WITHIN_WINDOW.plusSeconds(1));
+
+        assertThat(raised).isTrue();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getCapacity()).isEqualTo(4);
+        assertThat(event.getEnrolled())
+                .extracting(EnrolledEntry::studentId)
+                .containsExactly("student-1", "student-2", "student-3", "student-4");
+        assertThat(event.getEnrolled().subList(2, 4))
+                .allSatisfy(entry -> {
+                    assertThat(entry.via()).isEqualTo(EnrollmentVia.PROMOTED);
+                    assertThat(entry.at()).isEqualTo(WITHIN_WINDOW.plusSeconds(1));
+                });
+        assertThat(event.getWaitlist()).containsExactly("student-5");
+        assertThat(event.getPromotedCount()).isEqualTo(2);
+    }
+
+    @Test
+    void capacityRaiseCannotMoveStartsAtToNowAndPromoteInTheSameWrite() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+        Instant now = WITHIN_WINDOW.plusSeconds(1);
+        EventEdit startNowAndRaiseCapacity =
+                new EventEdit(null, null, null, null, now, null, 2);
+
+        boolean edited = repository.edit(id, Set.of("club-a"), startNowAndRaiseCapacity, now);
+
+        assertThat(edited).isFalse();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getStartsAt()).isEqualTo(STARTS);
+        assertThat(event.getCapacity()).isEqualTo(1);
+        assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
+        assertThat(event.getWaitlist()).containsExactly("student-2");
+        assertThat(event.getPromotedCount()).isZero();
+    }
+
+    @Test
+    void withdrawalStillPromotesAfterTheRegistrationWindowCloses() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+
+        boolean withdrawn = repository.withdrawEnrolled(id, "student-1", CLOSES.plusSeconds(1));
+
+        assertThat(withdrawn).isTrue();
+        assertThat(repository.findById(id).orElseThrow().getEnrolled())
+                .extracting(EnrolledEntry::studentId)
+                .containsExactly("student-2");
+    }
+
+    @Test
+    void everySeatLedgerWriteIsRefusedAtTheExactInstantTheEventStarts() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+        EventEdit raiseCapacity = new EventEdit(null, null, null, null, null, null, 2);
+
+        assertThat(repository.takeSeat(id, "student-3", STARTS)).isFalse();
+        assertThat(repository.joinWaitlist(id, "student-3", STARTS)).isFalse();
+        assertThat(repository.leaveWaitlist(id, "student-2", STARTS)).isFalse();
+        assertThat(repository.withdrawEnrolled(id, "student-1", STARTS)).isFalse();
+        assertThat(repository.edit(id, Set.of("club-a"), raiseCapacity, STARTS)).isFalse();
+
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getCapacity()).isEqualTo(1);
+        assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
+        assertThat(event.getWaitlist()).containsExactly("student-2");
+        assertThat(event.getPromotedCount()).isZero();
+        assertThat(event.getEverQueuedCount()).isEqualTo(1);
     }
 
     @Test
@@ -219,6 +338,53 @@ class EventRepositorySeatLedgerIntegrationTest {
         Event event = repository.findById(id).orElseThrow();
         assertThat(event.getEnrolled()).hasSize(capacity);
         assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).doesNotHaveDuplicates();
+    }
+
+    @Test
+    @Tag("concurrency")
+    void parallelWithdrawalsOfOneSeatPromoteExactlyOneStudent() throws InterruptedException {
+        int attempts = 20;
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "enrolled-student", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "waiting-student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "waiting-student-2", WITHIN_WINDOW);
+
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        CountDownLatch startingGate = new CountDownLatch(1);
+        List<Callable<Boolean>> tasks = IntStream.range(0, attempts)
+                .<Callable<Boolean>>mapToObj(index -> () -> {
+                    startingGate.await();
+                    return repository.withdrawEnrolled(
+                            id, "enrolled-student", WITHIN_WINDOW.plusSeconds(1));
+                })
+                .toList();
+
+        try {
+            List<Future<Boolean>> futures = tasks.stream().map(pool::submit).toList();
+            startingGate.countDown();
+
+            AtomicInteger successes = new AtomicInteger();
+            for (Future<Boolean> future : futures) {
+                if (future.get()) {
+                    successes.incrementAndGet();
+                }
+            }
+
+            assertThat(successes.get()).isEqualTo(1);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw new AssertionError(e);
+        } finally {
+            pool.shutdown();
+            pool.awaitTermination(10, TimeUnit.SECONDS);
+        }
+
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getEnrolled())
+                .extracting(EnrolledEntry::studentId)
+                .containsExactly("waiting-student-1");
+        assertThat(event.getWaitlist()).containsExactly("waiting-student-2");
+        assertThat(event.getPromotedCount()).isEqualTo(1);
+        assertThat(event.getPromotedCount()).isLessThanOrEqualTo(event.getEverQueuedCount());
     }
 
     private String publishedEvent(int capacity) {

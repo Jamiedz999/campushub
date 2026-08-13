@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router";
+import { useCurrentActor } from "../../../lib/auth";
 import { describePhase } from "../describePhase";
 import { useEventsBrowse } from "../hooks/useEventsBrowse";
 import type { EventBrowseFilters, EventSort } from "../types";
@@ -21,6 +22,7 @@ export function EventsBrowsePage() {
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState<EventBrowseFilters>({ page: 0, size: PAGE_SIZE });
 
+  const currentActor = useCurrentActor();
   const query = useEventsBrowse(filters);
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
@@ -118,6 +120,14 @@ export function EventsBrowsePage() {
                   </Link>
                   <p className="text-sm text-slate-600">{item.description}</p>
                   <p className="text-sm">{describePhase(item)}</p>
+                  {currentActor.data?.officerClubIds.includes(item.clubId) && (
+                    <Link
+                      to={`/officer/events/${item.id}/capacity`}
+                      className="text-sm font-medium text-slate-700 hover:underline"
+                    >
+                      Manage capacity
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

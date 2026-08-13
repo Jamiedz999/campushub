@@ -5,6 +5,7 @@ export type { Phase } from "../../types/phase";
 import type { Phase } from "../../types/phase";
 
 export type EventSort = "STARTS_AT_ASC" | "STARTS_AT_DESC" | "CREATED_AT_DESC" | "RELEVANCE";
+export type EventStatus = "DRAFT" | "PUBLISHED" | "CANCELLED";
 
 export interface EventBrowseItem {
   id: string;
@@ -30,4 +31,11 @@ export interface EventBrowseFilters {
   sort?: EventSort;
   page: number;
   size: number;
+}
+
+export interface EventOfficerView extends EventBrowseItem {
+  status: EventStatus;
+  promotedCount: number;
+  everQueuedCount: number;
+  waitlistConversion: number;
 }

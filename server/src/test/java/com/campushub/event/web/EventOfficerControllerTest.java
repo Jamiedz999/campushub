@@ -83,6 +83,9 @@ class EventOfficerControllerTest {
         EventOfficerResponse response = controller.get("event-1");
 
         assertThat(response.title()).isEqualTo("Title");
+        assertThat(response.promotedCount()).isZero();
+        assertThat(response.everQueuedCount()).isZero();
+        assertThat(response.waitlistConversion()).isZero();
     }
 
     @Test

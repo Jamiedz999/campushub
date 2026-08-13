@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
@@ -226,6 +228,14 @@ class EventModuleImplTest {
     }
 
     @Test
+    void registerJoinsTheWaitlistWhenTakingASeatLoses() {
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.joinWaitlist("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.SUCCESS);
+    }
+
+    @Test
     void registerClassifiesAsNotFoundWhenTheEventDoesNotExistAtAll() {
         when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
         when(repository.findById("event-1")).thenReturn(Optional.empty());
@@ -252,6 +262,70 @@ class EventModuleImplTest {
         // RegistrationOutcomeTest's job; this only proves the module delegates to it rather than
         // inventing its own classification.
         assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void withdrawReturnsSuccessWhenAnEnrolledStudentIsRemoved() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawFallsBackToLeavingTheWaitlist() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.leaveWaitlist("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawRetriesSeatRemovalWhenTheStudentIsPromotedDuringTheRequest() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(false, true);
+        when(repository.leaveWaitlist("event-1", "student-1", NOW)).thenReturn(false);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+        verify(repository, times(2)).withdrawEnrolled("event-1", "student-1", NOW);
+    }
+
+    @Test
+    void withdrawReportsEventCancelledWhenTheFrozenEventIsVisible() {
+        Event cancelled = eventWithStatus(EventStatus.CANCELLED);
+        when(repository.findById("event-1")).thenReturn(Optional.of(cancelled));
+
+        assertThat(module.withdraw("event-1", "student-1"))
+                .isEqualTo(WithdrawalOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void withdrawReportsEventStartedAtTheExactFreezeInstant() {
+        Event started = eventWithStatus(EventStatus.PUBLISHED);
+        when(started.getStartsAt()).thenReturn(NOW);
+        when(repository.findById("event-1")).thenReturn(Optional.of(started));
+
+        assertThat(module.withdraw("event-1", "student-1"))
+                .isEqualTo(WithdrawalOutcome.EVENT_STARTED);
+    }
+
+    @Test
+    void repeatedWithdrawalBeforeTheEventStartsIsIdempotentlySuccessful() {
+        Event upcoming = eventWithStatus(EventStatus.PUBLISHED);
+        when(upcoming.getStartsAt()).thenReturn(NOW.plusSeconds(1));
+        when(repository.findById("event-1")).thenReturn(Optional.of(upcoming));
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawHidesAMissingOrDraftEvent() {
+        when(repository.findById("missing-event")).thenReturn(Optional.empty());
+        Event draft = eventWithStatus(EventStatus.DRAFT);
+        when(repository.findById("draft-event")).thenReturn(Optional.of(draft));
+
+        assertThat(module.withdraw("missing-event", "student-1"))
+                .isEqualTo(WithdrawalOutcome.NOT_FOUND);
+        assertThat(module.withdraw("draft-event", "student-1"))
+                .isEqualTo(WithdrawalOutcome.NOT_FOUND);
     }
 
     @Test

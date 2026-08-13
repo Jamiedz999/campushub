@@ -34,6 +34,8 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolledCount: 28,
     waitlistCount: 0,
     enrolled: false,
+    enrollmentVia: null,
+    waitlistPosition: null,
     ...overrides,
   };
 }
@@ -83,13 +85,72 @@ describe("EventRegistrationPage", () => {
     expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
   });
 
-  it("shows no Register button once the Event is full", async () => {
+  it("offers the Waitlist once the Event is full", async () => {
     vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ phase: "FULL" })));
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText("This Event is full")).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Join the Waitlist" })).toBeInTheDocument();
+  });
+
+  it("shows the Students position and lets them leave the Waitlist", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ phase: "FULL", waitlistCount: 4, waitlistPosition: 3 })),
+    );
+    const deleteSpy = vi
+      .spyOn(httpClient, "delete")
+      .mockResolvedValue(axiosResponse(view({ phase: "FULL", waitlistCount: 3 })));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("You’re number 3 on the Waitlist.")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Leave the Waitlist" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Join the Waitlist" })).toBeInTheDocument());
+    expect(deleteSpy).toHaveBeenCalledWith("/events/event-1/registration");
+  });
+
+  it("shows the promotion badge when the Student came off the Waitlist", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ enrolled: true, enrollmentVia: "PROMOTED" })),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("You were on the Waitlist — you’re in.")).toBeInTheDocument();
+    });
+  });
+
+  it("lets an enrolled Student withdraw and renders the fresh registration view", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ enrolled: true, enrollmentVia: "DIRECT" })),
+    );
+    const deleteSpy = vi.spyOn(httpClient, "delete").mockResolvedValue(axiosResponse(view({})));
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Withdraw from Event" }));
+
+    expect(await screen.findByRole("button", { name: "Register" })).toBeInTheDocument();
+    expect(deleteSpy).toHaveBeenCalledWith("/events/event-1/registration");
+  });
+
+  it("shows the shared error when a withdrawal reaches the start-time freeze", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ enrolled: true, enrollmentVia: "DIRECT" })),
+    );
+    vi.spyOn(httpClient, "delete").mockRejectedValue(
+      new ApiError({ code: "EVENT_STARTED", status: 409, title: "Conflict", detail: "started" }),
+    );
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Withdraw from Event" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This Event has already started.");
   });
 
   it("renders the load error from the error's code", async () => {

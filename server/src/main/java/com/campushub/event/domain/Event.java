@@ -39,6 +39,10 @@ public class Event {
 
     private List<String> waitlist;
 
+    private int promotedCount;
+
+    private int everQueuedCount;
+
     public Event() {}
 
     public Event(
@@ -61,6 +65,8 @@ public class Event {
         this.capacity = capacity;
         this.enrolled = new ArrayList<>();
         this.waitlist = new ArrayList<>();
+        this.promotedCount = 0;
+        this.everQueuedCount = 0;
     }
 
     // Package-private: lets domain tests build an Event in any stored state directly, without a Mongo
@@ -138,5 +144,18 @@ public class Event {
 
     public List<String> getWaitlist() {
         return List.copyOf(waitlist);
+    }
+
+    public int getEverQueuedCount() {
+        return everQueuedCount;
+    }
+
+    public int getPromotedCount() {
+        return promotedCount;
+    }
+
+    /** Waitlist joins are the fixed denominator; leaving the Waitlist never makes demand disappear. */
+    public double waitlistConversion() {
+        return everQueuedCount == 0 ? 0.0 : (double) promotedCount / everQueuedCount;
     }
 }

@@ -22,7 +22,10 @@ record EventOfficerResponse(
         Instant endsAt,
         int capacity,
         int enrolledCount,
-        int waitlistCount) {
+        int waitlistCount,
+        int promotedCount,
+        int everQueuedCount,
+        double waitlistConversion) {
 
     static EventOfficerResponse from(Event event, Instant now) {
         return new EventOfficerResponse(
@@ -38,6 +41,9 @@ record EventOfficerResponse(
                 event.getEndsAt(),
                 event.getCapacity(),
                 event.getEnrolled().size(),
-                event.getWaitlist().size());
+                event.getWaitlist().size(),
+                event.getPromotedCount(),
+                event.getEverQueuedCount(),
+                event.waitlistConversion());
     }
 }

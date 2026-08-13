@@ -17,6 +17,8 @@ import java.util.Set;
 import org.bson.Document;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
 import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.index.TextIndexDefinition;
 import org.springframework.data.mongodb.core.index.TextIndexDefinition.TextIndexDefinitionBuilder;
@@ -121,6 +123,12 @@ public class EventRepository {
                     .orOperator(
                             Criteria.where("status").is(EventStatus.DRAFT),
                             Criteria.where("capacity").lt(edit.capacity())));
+            guards.add(Criteria.where("startsAt").gt(now));
+            if (edit.startsAt() != null) {
+                guards.add(Criteria.where("$expr")
+                        .is(new Document(
+                                "$gt", List.of(Date.from(edit.startsAt()), Date.from(now)))));
+            }
         }
 
         Criteria filter = Criteria.where("id")
@@ -128,6 +136,11 @@ public class EventRepository {
                 .and("clubId")
                 .in(clubIds)
                 .andOperator(guards.toArray(new Criteria[0]));
+
+        if (edit.capacity() != null) {
+            AggregationUpdate update = capacityRaiseUpdate(edit, now);
+            return mongoTemplate.updateFirst(new Query(filter), update, Event.class).getModifiedCount() > 0;
+        }
 
         Update update = new Update();
         if (edit.title() != null) {
@@ -148,14 +161,53 @@ public class EventRepository {
         if (edit.endsAt() != null) {
             update.set("endsAt", edit.endsAt());
         }
-        if (edit.capacity() != null) {
-            update.set("capacity", edit.capacity());
-        }
-
         return mongoTemplate
                         .updateFirst(new Query(filter), update, Event.class)
                         .getModifiedCount()
                 > 0;
+    }
+
+    private static AggregationUpdate capacityRaiseUpdate(EventEdit edit, Instant now) {
+        int newCapacity = edit.capacity();
+        Document availablePlaces = new Document(
+                "$max",
+                List.of(0, new Document("$subtract", List.of(newCapacity, new Document("$size", "$enrolled")))));
+        Document studentsToPromote = promotionCount(availablePlaces);
+
+        Document setFields = editFields(edit);
+        setFields.put("capacity", newCapacity);
+        setFields.put(
+                "enrolled",
+                new Document("$concatArrays", List.of("$enrolled", promotedEntries(studentsToPromote, now))));
+        setFields.put("waitlist", waitlistAfterPromotions(studentsToPromote));
+        setFields.put("promotedCount", promotedCountAfter(studentsToPromote));
+
+        return AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
+    }
+
+    private static Document editFields(EventEdit edit) {
+        Document fields = new Document();
+        putIfPresent(fields, "title", asLiteral(edit.title()));
+        putIfPresent(fields, "description", asLiteral(edit.description()));
+        putIfPresent(fields, "registrationOpensAt", asDate(edit.registrationOpensAt()));
+        putIfPresent(fields, "registrationClosesAt", asDate(edit.registrationClosesAt()));
+        putIfPresent(fields, "startsAt", asDate(edit.startsAt()));
+        putIfPresent(fields, "endsAt", asDate(edit.endsAt()));
+        return fields;
+    }
+
+    private static Document asLiteral(String value) {
+        return value == null ? null : new Document("$literal", value);
+    }
+
+    private static Date asDate(Instant instant) {
+        return instant == null ? null : Date.from(instant);
+    }
+
+    private static void putIfPresent(Document fields, String name, Object value) {
+        if (value != null) {
+            fields.put(name, value);
+        }
     }
 
     /** Draft only, forward-only — there is no matching un-publish method. */
@@ -236,6 +288,111 @@ public class EventRepository {
                         .updateFirst(new Query(filter), update, Event.class)
                         .getModifiedCount()
                 > 0;
+    }
+
+    /**
+     * Appends one Student to the ordered Waitlist and records that join in the same guarded write. The
+     * write deliberately has no capacity guard: the caller reaches it only after losing takeSeat, while
+     * every lifecycle and duplicate guard is repeated here so a changed Event can never accept an
+     * invalid join.
+     */
+    public boolean joinWaitlist(String eventId, String studentId, Instant now) {
+        Query query = new Query(Criteria.where("id")
+                .is(eventId)
+                .and("status")
+                .is(EventStatus.PUBLISHED)
+                .and("registrationOpensAt")
+                .lte(now)
+                .and("registrationClosesAt")
+                .gt(now)
+                .and("startsAt")
+                .gt(now)
+                .and("enrolled.studentId")
+                .ne(studentId)
+                .and("waitlist")
+                .ne(studentId));
+        Update update = new Update().push("waitlist", studentId).inc("everQueuedCount", 1);
+
+        return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+    }
+
+    /** Leaving the Waitlist removes only that Student, preserves order, and never promotes anyone. */
+    public boolean leaveWaitlist(String eventId, String studentId, Instant now) {
+        Query query = new Query(Criteria.where("id")
+                .is(eventId)
+                .and("status")
+                .is(EventStatus.PUBLISHED)
+                .and("startsAt")
+                .gt(now)
+                .and("waitlist")
+                .is(studentId));
+        Update update = new Update().pull("waitlist", studentId);
+
+        return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+    }
+
+    /**
+     * Frees one held Seat and, when the Waitlist is non-empty, fills that same Seat from its head in
+     * one aggregation-pipeline update. MongoDB serializes concurrent writes to this Event document, so
+     * each matching withdrawal can promote at most one Student and no separate promotion race exists.
+     */
+    public boolean withdrawEnrolled(String eventId, String studentId, Instant now) {
+        Query query = new Query(Criteria.where("id")
+                .is(eventId)
+                .and("status")
+                .is(EventStatus.PUBLISHED)
+                .and("startsAt")
+                .gt(now)
+                .and("enrolled.studentId")
+                .is(studentId));
+
+        Document studentsToPromote = promotionCount(1);
+        Document remainingEnrolled = new Document(
+                "$filter",
+                new Document("input", "$enrolled")
+                        .append("as", "entry")
+                        .append("cond", new Document("$ne", List.of("$$entry.studentId", studentId))));
+        Document setFields = new Document(
+                        "enrolled",
+                        new Document(
+                                "$concatArrays",
+                                List.of(remainingEnrolled, promotedEntries(studentsToPromote, now))))
+                .append("waitlist", waitlistAfterPromotions(studentsToPromote))
+                .append("promotedCount", promotedCountAfter(studentsToPromote));
+        AggregationUpdate update = AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
+
+        return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+    }
+
+    private static Document promotionCount(Object availablePlaces) {
+        return new Document("$min", List.of(new Document("$size", "$waitlist"), availablePlaces));
+    }
+
+    private static Document promotedEntries(Document studentsToPromote, Instant now) {
+        return new Document(
+                "$map",
+                new Document("input", new Document("$slice", List.of("$waitlist", studentsToPromote)))
+                        .append("as", "studentId")
+                        .append(
+                                "in",
+                                new Document("studentId", "$$studentId")
+                                        .append("via", EnrollmentVia.PROMOTED.name())
+                                        .append("at", Date.from(now))));
+    }
+
+    private static Document waitlistAfterPromotions(Document studentsToPromote) {
+        Document waitlistSize = new Document("$size", "$waitlist");
+        return new Document(
+                "$cond",
+                List.of(
+                        new Document("$gt", List.of(studentsToPromote, 0)),
+                        new Document("$slice", List.of("$waitlist", studentsToPromote, waitlistSize)),
+                        "$waitlist"));
+    }
+
+    private static Document promotedCountAfter(Document studentsToPromote) {
+        return new Document(
+                "$add", List.of(new Document("$ifNull", List.of("$promotedCount", 0)), studentsToPromote));
     }
 
     /** The Student's own "my events" list — every Event, whatever its Status, where they hold a Seat. */

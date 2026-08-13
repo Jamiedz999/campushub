@@ -36,6 +36,9 @@ export function MyEventsPage() {
                   </Link>
                   <p className="text-sm text-slate-600">{item.description}</p>
                   <p className="text-sm">{describePhase(item)}</p>
+                  {item.enrollmentVia === "PROMOTED" && (
+                    <p className="font-medium text-emerald-700">You were on the Waitlist — you&rsquo;re in.</p>
+                  )}
                 </li>
               ))}
             </ul>

@@ -5,6 +5,8 @@
 // code may move down into types/lib — see docs/planning/implementation/TECHNICAL-BASELINE.md.
 import type { Phase } from "../../types/phase";
 
+export type EnrollmentVia = "DIRECT" | "PROMOTED";
+
 export interface EventRegistrationView {
   id: string;
   clubId: string;
@@ -20,4 +22,8 @@ export interface EventRegistrationView {
   waitlistCount: number;
   /** Whether the signed-in Student themselves already holds a Seat — never who else does. */
   enrolled: boolean;
+  /** Why this Student holds their Seat; null when they do not hold one. */
+  enrollmentVia: EnrollmentVia | null;
+  /** One-based position for this Student only; null when they are not waiting. */
+  waitlistPosition: number | null;
 }
