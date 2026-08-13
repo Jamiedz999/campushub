@@ -6,6 +6,14 @@ spring:
   data:
     mongodb:
       auto-index-creation: false
+  session:
+    store-type: mongodb
+
+# server.servlet.session.cookie.secure is left unset deliberately: Boot's default mirrors the
+# scheme of the current request, so the cookie is Secure whenever TLS is actually terminated in
+# front of the app and plain over local HTTP (compose, dev, this test suite) — hardcoding true here
+# would break every local and CI environment, since none of them terminate TLS. TLS itself is an
+# environment input the release Issue supplies (see TECHNICAL-BASELINE.md), not a Core decision.
 
 campushub:
   zone: Europe/Dublin

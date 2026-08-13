@@ -3,6 +3,7 @@ package com.campushub.shared.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campushub.shared.ErrorCode;
+import com.campushub.shared.NotFoundException;
 import java.util.HashMap;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
@@ -15,6 +16,19 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+    @Test
+    void notFoundExceptionBecomesProblemDetailWithNotFoundCode() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/clubs/abc/officers");
+
+        ProblemDetail problem = handler.handleNotFound(new NotFoundException("no such club"), request);
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
+        assertThat(problem.getTitle()).isNotBlank();
+        assertThat(problem.getDetail()).isNotBlank();
+        assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/clubs/abc/officers"));
+        assertThat(problem.getProperties()).containsEntry("code", ErrorCode.NOT_FOUND);
+    }
 
     @Test
     void unexpectedExceptionBecomesProblemDetailWithInternalErrorCode() {

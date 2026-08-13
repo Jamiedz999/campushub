@@ -4,4 +4,10 @@
     <Match>
         <Bug pattern="CT_CONSTRUCTOR_THROW"/>
     </Match>
+    <!-- MongoTemplate is shared, constructor-injected Spring infrastructure, never a value object a
+         persistence class should defensively copy — this fires on every *Repository(MongoTemplate). -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Field type="org.springframework.data.mongodb.core.MongoTemplate"/>
+    </Match>
 </FindBugsFilter>
