@@ -1,8 +1,5 @@
+import { CAMPUS_TIME_ZONE } from "../../lib/campusTimeZone";
 import type { EventRegistrationView } from "./types";
-
-// The one campus timezone calendar values are computed in — see
-// docs/adr/15-define-http-api-and-time-contract.md. Never the viewer's browser timezone.
-const CAMPUS_TIME_ZONE = "Europe/Dublin";
 
 /** The Student-facing message for each Phase, scoped to what this Issue can actually do: joining the
  * Waitlist is Issue #5's territory, so FULL says only that the Event is full. See

@@ -76,8 +76,8 @@ class EventModuleImpl implements EventModule {
 
     @Override
     public EventPage browse(EventBrowseQuery query) {
-        int size = Math.min(Math.max(query.size(), 1), MAX_PAGE_SIZE);
-        int page = Math.max(query.page(), 0);
+        int size = clampSize(query.size());
+        int page = clampPage(query.page());
         EventSort sort = query.sort() != null ? query.sort() : defaultSort(query.searchTerm());
 
         EventBrowseQuery normalized = new EventBrowseQuery(
@@ -122,9 +122,7 @@ class EventModuleImpl implements EventModule {
 
     @Override
     public EventPage findEnrolled(String studentId, int page, int size) {
-        int clampedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-        int clampedPage = Math.max(page, 0);
-        return repository.findEnrolled(studentId, clampedPage, clampedSize);
+        return repository.findEnrolled(studentId, clampPage(page), clampSize(size));
     }
 
     // "Attempt first, then read once to classify" — see docs/adr/04-define-registration-capacity-and-waitlist.md.
@@ -134,5 +132,15 @@ class EventModuleImpl implements EventModule {
             return EventCommandResult.SUCCESS;
         }
         return existsInScope.getAsBoolean() ? EventCommandResult.NOT_EDITABLE : EventCommandResult.NOT_FOUND;
+    }
+
+    // Shared by every paged query — see docs/adr/15-define-http-api-and-time-contract.md: zero-indexed
+    // page, size default 20 (the caller's job), hard cap 100.
+    private static int clampPage(int page) {
+        return Math.max(page, 0);
+    }
+
+    private static int clampSize(int size) {
+        return Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
     }
 }

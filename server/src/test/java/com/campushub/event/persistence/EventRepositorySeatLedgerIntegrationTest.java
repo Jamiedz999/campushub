@@ -118,6 +118,13 @@ class EventRepositorySeatLedgerIntegrationTest {
     }
 
     @Test
+    void takeSeatSucceedsAtTheExactInstantRegistrationOpens() {
+        String id = publishedEvent(5);
+
+        assertThat(repository.takeSeat(id, "student-1", OPENS)).isTrue();
+    }
+
+    @Test
     void takeSeatFailsAtTheExactInstantRegistrationCloses() {
         String id = publishedEvent(5);
 

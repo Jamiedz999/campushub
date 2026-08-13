@@ -1,19 +1,9 @@
 // Mirrors com.campushub.event.web.EventRegistrationView — see
 // docs/adr/04-define-registration-capacity-and-waitlist.md and
-// docs/adr/15-define-http-api-and-time-contract.md.
-//
-// Phase is duplicated from features/events/types.ts rather than imported: a feature may not import from
-// another feature, enforced by ESLint import/no-restricted-paths — see
-// docs/planning/implementation/TECHNICAL-BASELINE.md.
-export type Phase =
-  | "DRAFT"
-  | "SCHEDULED"
-  | "REGISTRATION_OPEN"
-  | "FULL"
-  | "REGISTRATION_CLOSED"
-  | "IN_PROGRESS"
-  | "COMPLETED"
-  | "CANCELLED";
+// docs/adr/15-define-http-api-and-time-contract.md. Phase lives in ../../types/phase, shared with
+// features/events rather than duplicated — a feature may not import from another feature, but shared
+// code may move down into types/lib — see docs/planning/implementation/TECHNICAL-BASELINE.md.
+import type { Phase } from "../../types/phase";
 
 export interface EventRegistrationView {
   id: string;

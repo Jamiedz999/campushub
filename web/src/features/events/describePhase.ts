@@ -1,8 +1,5 @@
+import { CAMPUS_TIME_ZONE } from "../../lib/campusTimeZone";
 import type { EventBrowseItem } from "./types";
-
-// The one campus timezone calendar values are computed in — see
-// docs/adr/15-define-http-api-and-time-contract.md. Never the viewer's browser timezone.
-const CAMPUS_TIME_ZONE = "Europe/Dublin";
 
 /** The Student-facing message for each Phase — the "What the Student sees" column of the Phase table in
  * docs/adr/03-define-event-lifecycle.md. */

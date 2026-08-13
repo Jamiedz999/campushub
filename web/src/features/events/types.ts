@@ -1,14 +1,8 @@
-// Mirrors com.campushub.event.domain.Phase and the DTOs in com.campushub.event.web — see
-// docs/adr/03-define-event-lifecycle.md and docs/adr/16-define-event-discovery.md.
-export type Phase =
-  | "DRAFT"
-  | "SCHEDULED"
-  | "REGISTRATION_OPEN"
-  | "FULL"
-  | "REGISTRATION_CLOSED"
-  | "IN_PROGRESS"
-  | "COMPLETED"
-  | "CANCELLED";
+// Mirrors the DTOs in com.campushub.event.web — see docs/adr/03-define-event-lifecycle.md and
+// docs/adr/16-define-event-discovery.md. Phase itself lives in ../../types/phase — shared with
+// features/registration, which renders the same Phase for a single Event.
+export type { Phase } from "../../types/phase";
+import type { Phase } from "../../types/phase";
 
 export type EventSort = "STARTS_AT_ASC" | "STARTS_AT_DESC" | "CREATED_AT_DESC" | "RELEVANCE";
 
