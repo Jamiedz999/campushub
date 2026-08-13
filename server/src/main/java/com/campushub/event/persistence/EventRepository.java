@@ -1,5 +1,7 @@
 package com.campushub.event.persistence;
 
+import com.campushub.event.domain.EnrolledEntry;
+import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventEdit;
@@ -61,6 +63,11 @@ public class EventRepository {
                         .on("registrationClosesAt", Sort.Direction.ASC));
     }
 
+    /** Mongock-owned: called only from EventSeatLedgerIndexChangeUnit. Serves findEnrolled's "my events" query. */
+    public void ensureSeatLedgerIndexes() {
+        mongoTemplate.indexOps(Event.class).createIndex(new Index().on("enrolled.studentId", Sort.Direction.ASC));
+    }
+
     /** Inserts a new Draft and returns its generated id. */
     public String insertDraft(Event draft) {
         return mongoTemplate.insert(draft).getId();
@@ -81,6 +88,15 @@ public class EventRepository {
     /** True if an Event with this id exists at all, ignoring Club — the admin cancel path's classifier. */
     public boolean exists(String eventId) {
         return mongoTemplate.exists(new Query(Criteria.where("id").is(eventId)), Event.class);
+    }
+
+    /**
+     * Unscoped by Club and by Status — a Student is never an Officer of anything, so there is no grant
+     * set to scope by. Used both for the Student's own view of an Event and as the one follow-up read
+     * that classifies a refused takeSeat. See docs/adr/04-define-registration-capacity-and-waitlist.md.
+     */
+    public Optional<Event> findById(String eventId) {
+        return Optional.ofNullable(mongoTemplate.findById(eventId, Event.class));
     }
 
     /**
@@ -186,6 +202,52 @@ public class EventRepository {
         // it was, per docs/adr/03-define-event-lifecycle.md.
         Update update = new Update().set("status", EventStatus.CANCELLED);
         return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+    }
+
+    /**
+     * The whole Seat Ledger race resolved in one write: Published, both Registration Window bounds, the
+     * startsAt freeze, both duplicate guards and the capacity $expr guard all live in this one filter, so
+     * a losing writer changes nothing and there is no read-then-write anywhere. See
+     * docs/adr/04-define-registration-capacity-and-waitlist.md's "Taking a Seat". Returns whether the
+     * guard passed; a failed attempt is classified by one separate follow-up read (findById), never by
+     * anything in this method.
+     */
+    public boolean takeSeat(String eventId, String studentId, Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("status")
+                .is(EventStatus.PUBLISHED)
+                .and("registrationOpensAt")
+                .lte(now)
+                .and("registrationClosesAt")
+                .gt(now)
+                .and("startsAt")
+                .gt(now)
+                .and("enrolled.studentId")
+                .ne(studentId)
+                .and("waitlist")
+                .ne(studentId)
+                .and("$expr")
+                .is(new Document("$lt", List.of(new Document("$size", "$enrolled"), "$capacity")));
+
+        Update update = new Update().push("enrolled", new EnrolledEntry(studentId, EnrollmentVia.DIRECT, now));
+
+        return mongoTemplate
+                        .updateFirst(new Query(filter), update, Event.class)
+                        .getModifiedCount()
+                > 0;
+    }
+
+    /** The Student's own "my events" list — every Event, whatever its Status, where they hold a Seat. */
+    public EventPage findEnrolled(String studentId, int page, int size) {
+        Query query = new Query(Criteria.where("enrolled.studentId").is(studentId));
+
+        long total = mongoTemplate.count(query, Event.class);
+
+        query.with(Sort.by(Sort.Direction.ASC, "startsAt")).skip((long) page * size).limit(size);
+        List<Event> items = mongoTemplate.find(query, Event.class);
+
+        return new EventPage(items, page, size, total);
     }
 
     /**

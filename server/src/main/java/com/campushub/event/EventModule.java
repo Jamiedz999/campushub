@@ -5,6 +5,7 @@ import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
+import com.campushub.event.domain.RegistrationOutcome;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -50,4 +51,20 @@ public interface EventModule {
 
     /** Published Events only, matching docs/adr/16-define-event-discovery.md's search/filter/sort/paging. */
     EventPage browse(EventBrowseQuery query);
+
+    /**
+     * The Student's own view of an Event, by id. Not scoped by Club — every signed-in account is a
+     * Student — but a Draft is never visible: it has not been announced, the same way it is absent from
+     * {@link #browse}.
+     */
+    Optional<Event> findForStudent(String eventId);
+
+    /**
+     * Taking a Seat — one guarded write, then (only on failure) one follow-up read to classify why. See
+     * docs/adr/04-define-registration-capacity-and-waitlist.md. Correctness lives entirely in the write.
+     */
+    RegistrationOutcome register(String eventId, String studentId);
+
+    /** The Student's "my events": every Event, whatever its Status, where they hold a Seat. */
+    EventPage findEnrolled(String studentId, int page, int size);
 }

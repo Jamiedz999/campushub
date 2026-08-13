@@ -35,7 +35,7 @@ public class Event {
 
     private int capacity;
 
-    private List<String> enrolled;
+    private List<EnrolledEntry> enrolled;
 
     private List<String> waitlist;
 
@@ -76,7 +76,7 @@ public class Event {
             Instant startsAt,
             Instant endsAt,
             int capacity,
-            List<String> enrolled,
+            List<EnrolledEntry> enrolled,
             List<String> waitlist) {
         this.id = id;
         this.clubId = clubId;
@@ -132,7 +132,7 @@ public class Event {
         return capacity;
     }
 
-    public List<String> getEnrolled() {
+    public List<EnrolledEntry> getEnrolled() {
         return List.copyOf(enrolled);
     }
 

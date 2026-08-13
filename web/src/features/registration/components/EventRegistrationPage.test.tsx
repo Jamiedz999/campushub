@@ -1,0 +1,136 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { AxiosHeaders } from "axios";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../lib/apiError";
+import { httpClient } from "../../../lib/httpClient";
+import type { EventRegistrationView } from "../types";
+import { EventRegistrationPage } from "./EventRegistrationPage";
+
+function axiosResponse<T>(data: T) {
+  return {
+    data,
+    status: 200,
+    statusText: "OK",
+    headers: new AxiosHeaders(),
+    config: { headers: new AxiosHeaders() },
+  };
+}
+
+function view(overrides: Partial<EventRegistrationView>): EventRegistrationView {
+  return {
+    id: "event-1",
+    clubId: "club-1",
+    title: "Robotics Night",
+    description: "Build a small robot",
+    phase: "REGISTRATION_OPEN",
+    registrationOpensAt: "2026-03-01T00:00:00Z",
+    registrationClosesAt: "2026-03-10T00:00:00Z",
+    startsAt: "2026-03-20T00:00:00Z",
+    endsAt: "2026-03-20T02:00:00Z",
+    capacity: 40,
+    enrolledCount: 28,
+    waitlistCount: 0,
+    enrolled: false,
+    ...overrides,
+  };
+}
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/events/event-1"]}>
+        <Routes>
+          <Route path="/events/:eventId" element={<EventRegistrationPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("EventRegistrationPage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders a loading state while the request is in flight", () => {
+    vi.spyOn(httpClient, "get").mockReturnValue(new Promise(() => {}));
+
+    renderPage();
+
+    expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
+  });
+
+  it("shows the Register button when registration is open and the Student is not enrolled", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({})));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Robotics Night")).toBeInTheDocument());
+    expect(screen.getByText("12 of 40 seats left")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+  });
+
+  it("shows a confirmation instead of a button once already enrolled", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ enrolled: true })));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/you.re registered/i)).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
+  });
+
+  it("shows no Register button once the Event is full", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ phase: "FULL" })));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("This Event is full")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
+  });
+
+  it("renders the load error from the error's code", async () => {
+    vi.spyOn(httpClient, "get").mockRejectedValue(
+      new ApiError({ code: "NOT_FOUND", status: 404, title: "Not Found", detail: "no such event" }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("This Event could not be found.");
+    });
+  });
+
+  it("registers on click and shows the fresh, enrolled view", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({})));
+    vi.spyOn(httpClient, "post").mockResolvedValue(axiosResponse(view({ enrolled: true, enrolledCount: 29 })));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    await waitFor(() => expect(screen.getByText(/you.re registered/i)).toBeInTheDocument());
+  });
+
+  it("shows the matching message when the registration attempt is refused", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({})));
+    vi.spyOn(httpClient, "post").mockRejectedValue(
+      new ApiError({ code: "EVENT_FULL", status: 409, title: "Conflict", detail: "full" }),
+    );
+
+    renderPage();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("This Event is full.");
+    });
+  });
+});

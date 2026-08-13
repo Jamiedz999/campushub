@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Link } from "react-router";
 import { describePhase } from "../describePhase";
 import { useEventsBrowse } from "../hooks/useEventsBrowse";
 import type { EventBrowseFilters, EventSort } from "../types";
@@ -52,7 +53,12 @@ export function EventsBrowsePage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-xl font-semibold">Events</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Events</h1>
+        <Link to="/events/mine" className="text-sm text-slate-600 hover:underline">
+          My events
+        </Link>
+      </div>
 
       <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">
         <input
@@ -107,7 +113,9 @@ export function EventsBrowsePage() {
             <ul className="flex flex-col gap-4">
               {query.data.items.map((item) => (
                 <li key={item.id} className="rounded border p-4">
-                  <h2 className="font-semibold">{item.title}</h2>
+                  <Link to={`/events/${item.id}`} className="font-semibold hover:underline">
+                    {item.title}
+                  </Link>
                   <p className="text-sm text-slate-600">{item.description}</p>
                   <p className="text-sm">{describePhase(item)}</p>
                 </li>

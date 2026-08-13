@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
+
 // Every row of the Phase table in docs/adr/03-define-event-lifecycle.md, including the exact instants
 // at which one Phase gives way to the next. All against a fixed set of timestamps and a fixed `now` —
 // no wall clock anywhere, per the technical baseline's Clock rule.
@@ -126,7 +127,19 @@ class PhaseTest {
     }
 
     private static Event cancel(Event event) {
-        return withStatus(EventStatus.CANCELLED, event.getEnrolled());
+        return new Event(
+                "event-1",
+                "club-1",
+                "Title",
+                "Description",
+                EventStatus.CANCELLED,
+                OPENS,
+                CLOSES,
+                STARTS,
+                ENDS,
+                CAPACITY,
+                event.getEnrolled(),
+                event.getWaitlist());
     }
 
     private static Event withStatus(EventStatus status, List<String> enrolledStudentIds) {
@@ -141,7 +154,13 @@ class PhaseTest {
                 STARTS,
                 ENDS,
                 CAPACITY,
-                enrolledStudentIds,
+                enrolledEntriesOf(enrolledStudentIds),
                 List.of());
+    }
+
+    private static List<EnrolledEntry> enrolledEntriesOf(List<String> studentIds) {
+        return studentIds.stream()
+                .map(studentId -> new EnrolledEntry(studentId, EnrollmentVia.DIRECT, OPENS))
+                .toList();
     }
 }

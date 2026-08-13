@@ -2,6 +2,7 @@ package com.campushub.shared.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campushub.shared.ConflictException;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.EventNotEditableException;
 import com.campushub.shared.NotFoundException;
@@ -43,6 +44,20 @@ class GlobalExceptionHandlerTest {
         assertThat(problem.getDetail()).isNotBlank();
         assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/events/abc"));
         assertThat(problem.getProperties()).containsEntry("code", ErrorCode.EVENT_NOT_EDITABLE);
+    }
+
+    @Test
+    void conflictExceptionBecomesProblemDetailWithItsOwnCode() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/events/abc/registration");
+
+        ProblemDetail problem = handler.handleConflict(
+                new ConflictException(ErrorCode.EVENT_FULL, "This Event is full."), request);
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(problem.getTitle()).isNotBlank();
+        assertThat(problem.getDetail()).isNotBlank();
+        assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/events/abc/registration"));
+        assertThat(problem.getProperties()).containsEntry("code", ErrorCode.EVENT_FULL);
     }
 
     @Test

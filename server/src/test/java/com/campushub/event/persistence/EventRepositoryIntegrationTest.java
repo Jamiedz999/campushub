@@ -2,6 +2,8 @@ package com.campushub.event.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campushub.event.domain.EnrolledEntry;
+import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventStatus;
@@ -144,11 +146,13 @@ class EventRepositoryIntegrationTest {
     @Test
     void officerCancelFreezesTheSeatLedgerRatherThanClearingIt() {
         String id = publishedEvent("club-a", 5);
-        // Seeded directly, bypassing the registration path (Issue #4's territory) — the point here is
-        // only that cancel's guarded update touches `status` and nothing else.
+        // Seeded directly rather than through takeSeat — the point here is only that cancel's guarded
+        // update touches `status` and nothing else.
+        List<EnrolledEntry> seededEnrolled =
+                List.of(new EnrolledEntry("student-1", EnrollmentVia.DIRECT, STARTS.minusSeconds(1_000)));
         mongoTemplate.updateFirst(
                 new Query(Criteria.where("id").is(id)),
-                new Update().set("enrolled", List.of("student-1")).set("waitlist", List.of("student-2")),
+                new Update().set("enrolled", seededEnrolled).set("waitlist", List.of("student-2")),
                 Event.class);
 
         boolean cancelled = repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60));
@@ -156,7 +160,7 @@ class EventRepositoryIntegrationTest {
         assertThat(cancelled).isTrue();
         Event event = repository.findScopedById(id, Set.of("club-a")).orElseThrow();
         assertThat(event.getStatus()).isEqualTo(EventStatus.CANCELLED);
-        assertThat(event.getEnrolled()).containsExactly("student-1");
+        assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
         assertThat(event.getWaitlist()).containsExactly("student-2");
     }
 
