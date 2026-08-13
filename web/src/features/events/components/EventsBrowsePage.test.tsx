@@ -5,6 +5,7 @@ import { AxiosHeaders } from "axios";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
+import type { CurrentActor } from "../../../lib/auth";
 import { httpClient } from "../../../lib/httpClient";
 import type { EventBrowseItem } from "../types";
 import { EventsBrowsePage } from "./EventsBrowsePage";
@@ -37,8 +38,18 @@ function item(overrides: Partial<EventBrowseItem>): EventBrowseItem {
   };
 }
 
-function renderPage() {
+const STUDENT: CurrentActor = {
+  accountId: "student-1",
+  email: "student@example.edu",
+  displayName: "Student One",
+  systemRole: "STUDENT",
+  officerClubIds: [],
+};
+
+function renderPage(actor: CurrentActor = STUDENT) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryDefaults(["auth", "me"], { staleTime: Number.POSITIVE_INFINITY });
+  client.setQueryData(["auth", "me"], actor);
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -73,6 +84,23 @@ describe("EventsBrowsePage", () => {
     });
     expect(screen.getByText("12 of 40 seats left")).toBeInTheDocument();
     expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+  });
+
+  it("links an Officer to capacity management only for their own Clubs Event", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({
+        items: [item({}), item({ id: "event-2", clubId: "club-2", title: "Chess Night" })],
+        page: 0,
+        size: 20,
+        total: 2,
+      }),
+    );
+
+    renderPage({ ...STUDENT, officerClubIds: ["club-1"] });
+
+    const link = await screen.findByRole("link", { name: "Manage capacity" });
+    expect(link).toHaveAttribute("href", "/officer/events/event-1/capacity");
+    expect(screen.getAllByRole("link", { name: "Manage capacity" })).toHaveLength(1);
   });
 
   it("renders an empty state when no events match", async () => {

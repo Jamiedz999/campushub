@@ -92,6 +92,30 @@ class EventRepositoryIntegrationTest {
     }
 
     @Test
+    void aCapacityRaiseTreatsOtherSparseEditValuesAsLiterals() {
+        String id = publishedEvent("club-a", 5);
+
+        boolean edited = repository.edit(
+                id,
+                Set.of("club-a"),
+                new EventEdit(
+                        "$5 Robotics Night",
+                        "$expr is part of the title, not Mongo syntax",
+                        null,
+                        null,
+                        null,
+                        null,
+                        10),
+                STARTS.minusSeconds(60));
+
+        assertThat(edited).isTrue();
+        Event event = repository.findScopedById(id, Set.of("club-a")).orElseThrow();
+        assertThat(event.getTitle()).isEqualTo("$5 Robotics Night");
+        assertThat(event.getDescription()).isEqualTo("$expr is part of the title, not Mongo syntax");
+        assertThat(event.getCapacity()).isEqualTo(10);
+    }
+
+    @Test
     void aPublishedEventBeforeStartsAtMayNotHaveItsCapacityLowered() {
         String id = publishedEvent("club-a", 5);
 

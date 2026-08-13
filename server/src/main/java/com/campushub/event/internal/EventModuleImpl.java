@@ -9,6 +9,7 @@ import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -110,6 +111,9 @@ class EventModuleImpl implements EventModule {
         if (applied) {
             return RegistrationOutcome.SUCCESS;
         }
+        if (repository.joinWaitlist(eventId, studentId, now)) {
+            return RegistrationOutcome.SUCCESS;
+        }
 
         Optional<Event> event = repository.findById(eventId);
         // A Draft is invisible to Students the same way it is absent from browse — reported as NOT_FOUND
@@ -118,6 +122,24 @@ class EventModuleImpl implements EventModule {
             return RegistrationOutcome.NOT_FOUND;
         }
         return RegistrationOutcome.classifyFailure(event.get(), studentId, now);
+    }
+
+    @Override
+    public WithdrawalOutcome withdraw(String eventId, String studentId) {
+        Instant now = clock.instant();
+        boolean withdrawn = repository.withdrawEnrolled(eventId, studentId, now);
+        if (!withdrawn) {
+            withdrawn = repository.leaveWaitlist(eventId, studentId, now);
+        }
+        if (withdrawn) {
+            return WithdrawalOutcome.SUCCESS;
+        }
+
+        Optional<Event> event = repository.findById(eventId);
+        if (event.isEmpty() || event.get().getStatus() == EventStatus.DRAFT) {
+            return WithdrawalOutcome.NOT_FOUND;
+        }
+        return WithdrawalOutcome.classifyFailure(event.get(), now);
     }
 
     @Override

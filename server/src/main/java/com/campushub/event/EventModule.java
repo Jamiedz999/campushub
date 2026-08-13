@@ -6,6 +6,7 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.event.domain.WithdrawalOutcome;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -64,6 +65,9 @@ public interface EventModule {
      * docs/adr/04-define-registration-capacity-and-waitlist.md. Correctness lives entirely in the write.
      */
     RegistrationOutcome register(String eventId, String studentId);
+
+    /** Withdraws the Student from a held Seat or the Waitlist, until the Event starts. */
+    WithdrawalOutcome withdraw(String eventId, String studentId);
 
     /** The Student's "my events": every Event, whatever its Status, where they hold a Seat. */
     EventPage findEnrolled(String studentId, int page, int size);

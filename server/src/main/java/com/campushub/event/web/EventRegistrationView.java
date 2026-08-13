@@ -1,6 +1,7 @@
 package com.campushub.event.web;
 
 import com.campushub.event.domain.Event;
+import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Phase;
 import java.time.Instant;
 
@@ -22,11 +23,18 @@ record EventRegistrationView(
         int capacity,
         int enrolledCount,
         int waitlistCount,
-        boolean enrolled) {
+        boolean enrolled,
+        EnrollmentVia enrollmentVia,
+        Integer waitlistPosition) {
 
     static EventRegistrationView from(Event event, String studentId, Instant now) {
-        boolean callerIsEnrolled =
-                event.getEnrolled().stream().anyMatch(entry -> entry.studentId().equals(studentId));
+        EnrollmentVia callerEnrollmentVia = event.getEnrolled().stream()
+                .filter(entry -> entry.studentId().equals(studentId))
+                .map(entry -> entry.via())
+                .findFirst()
+                .orElse(null);
+        int callerWaitlistIndex = event.getWaitlist().indexOf(studentId);
+        Integer callerWaitlistPosition = callerWaitlistIndex < 0 ? null : callerWaitlistIndex + 1;
         return new EventRegistrationView(
                 event.getId(),
                 event.getClubId(),
@@ -40,6 +48,8 @@ record EventRegistrationView(
                 event.getCapacity(),
                 event.getEnrolled().size(),
                 event.getWaitlist().size(),
-                callerIsEnrolled);
+                callerEnrollmentVia != null,
+                callerEnrollmentVia,
+                callerWaitlistPosition);
     }
 }

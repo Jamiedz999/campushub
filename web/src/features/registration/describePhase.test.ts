@@ -17,6 +17,8 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolledCount: 28,
     waitlistCount: 0,
     enrolled: false,
+    enrollmentVia: null,
+    waitlistPosition: null,
     ...overrides,
   };
 }
@@ -36,7 +38,7 @@ describe("describePhase", () => {
     );
   });
 
-  it("describes Full without mentioning the Waitlist — joining it is Issue #5's territory", () => {
+  it("describes Full", () => {
     expect(describePhase(view({ phase: "FULL" }))).toBe("This Event is full");
   });
 

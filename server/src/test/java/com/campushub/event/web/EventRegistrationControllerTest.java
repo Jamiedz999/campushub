@@ -2,12 +2,17 @@ package com.campushub.event.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.domain.EnrolledEntry;
+import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventPage;
+import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
 import com.campushub.identityaccess.domain.SystemRole;
@@ -56,6 +61,31 @@ class EventRegistrationControllerTest {
 
         assertThat(view.title()).isEqualTo("Title");
         assertThat(view.enrolled()).isFalse();
+    }
+
+    @Test
+    void getShowsAStudentsOneBasedWaitlistPosition() {
+        Event event = studentEvent(List.of(), List.of("student-a", "student-1", "student-b"));
+        when(eventModule.findForStudent("event-1")).thenReturn(Optional.of(event));
+
+        EventRegistrationView view = controller.get("event-1");
+
+        assertThat(view.waitlistPosition()).isEqualTo(2);
+        assertThat(view.enrollmentVia()).isNull();
+    }
+
+    @Test
+    void getCarriesThePromotionSignalWithoutExposingOtherStudents() {
+        Event event = studentEvent(
+                List.of(new EnrolledEntry("student-1", EnrollmentVia.PROMOTED, NOW.minusSeconds(1))),
+                List.of("student-b"));
+        when(eventModule.findForStudent("event-1")).thenReturn(Optional.of(event));
+
+        EventRegistrationView view = controller.get("event-1");
+
+        assertThat(view.enrolled()).isTrue();
+        assertThat(view.enrollmentVia()).isEqualTo(EnrollmentVia.PROMOTED);
+        assertThat(view.waitlistPosition()).isNull();
     }
 
     @Test
@@ -117,6 +147,43 @@ class EventRegistrationControllerTest {
         assertConflict(RegistrationOutcome.EVENT_FULL, ErrorCode.EVENT_FULL);
     }
 
+    @Test
+    void withdrawReturnsTheUpdatedViewOnSuccess() {
+        when(eventModule.withdraw("event-1", "student-1")).thenReturn(WithdrawalOutcome.SUCCESS);
+        when(eventModule.findForStudent("event-1")).thenReturn(Optional.of(someEvent()));
+
+        EventRegistrationView view = controller.withdraw("event-1");
+
+        assertThat(view.title()).isEqualTo("Title");
+    }
+
+    @Test
+    void withdrawThrowsAConflictWithEventStartedWhenTheFreezeHasEngaged() {
+        when(eventModule.withdraw("event-1", "student-1")).thenReturn(WithdrawalOutcome.EVENT_STARTED);
+
+        assertThatThrownBy(() -> controller.withdraw("event-1"))
+                .isInstanceOf(ConflictException.class)
+                .extracting(exception -> ((ConflictException) exception).code())
+                .isEqualTo(ErrorCode.EVENT_STARTED);
+    }
+
+    @Test
+    void withdrawThrowsAConflictWhenTheEventWasCancelled() {
+        when(eventModule.withdraw("event-1", "student-1")).thenReturn(WithdrawalOutcome.EVENT_CANCELLED);
+
+        assertThatThrownBy(() -> controller.withdraw("event-1"))
+                .isInstanceOf(ConflictException.class)
+                .extracting(exception -> ((ConflictException) exception).code())
+                .isEqualTo(ErrorCode.EVENT_CANCELLED);
+    }
+
+    @Test
+    void withdrawThrowsNotFoundWhenTheEventIsNotVisible() {
+        when(eventModule.withdraw("event-1", "student-1")).thenReturn(WithdrawalOutcome.NOT_FOUND);
+
+        assertThatThrownBy(() -> controller.withdraw("event-1")).isInstanceOf(NotFoundException.class);
+    }
+
     private void assertConflict(RegistrationOutcome outcome, ErrorCode expectedCode) {
         when(eventModule.register("event-1", "student-1")).thenReturn(outcome);
 
@@ -142,5 +209,22 @@ class EventRegistrationControllerTest {
         return new Event(
                 "club-a", "Title", "Description", NOW, NOW.plusSeconds(10), NOW.plusSeconds(20),
                 NOW.plusSeconds(30), 5);
+    }
+
+    private static Event studentEvent(List<EnrolledEntry> enrolled, List<String> waitlist) {
+        Event event = mock(Event.class);
+        when(event.getId()).thenReturn("event-1");
+        when(event.getClubId()).thenReturn("club-a");
+        when(event.getTitle()).thenReturn("Title");
+        when(event.getDescription()).thenReturn("Description");
+        when(event.getStatus()).thenReturn(EventStatus.PUBLISHED);
+        when(event.getRegistrationOpensAt()).thenReturn(NOW.minusSeconds(10));
+        when(event.getRegistrationClosesAt()).thenReturn(NOW.plusSeconds(10));
+        when(event.getStartsAt()).thenReturn(NOW.plusSeconds(20));
+        when(event.getEndsAt()).thenReturn(NOW.plusSeconds(30));
+        when(event.getCapacity()).thenReturn(5);
+        when(event.getEnrolled()).thenReturn(enrolled);
+        when(event.getWaitlist()).thenReturn(waitlist);
+        return event;
     }
 }

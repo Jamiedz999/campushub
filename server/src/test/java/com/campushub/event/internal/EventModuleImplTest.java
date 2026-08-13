@@ -15,6 +15,7 @@ import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -226,6 +227,14 @@ class EventModuleImplTest {
     }
 
     @Test
+    void registerJoinsTheWaitlistWhenTakingASeatLoses() {
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.joinWaitlist("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.SUCCESS);
+    }
+
+    @Test
     void registerClassifiesAsNotFoundWhenTheEventDoesNotExistAtAll() {
         when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
         when(repository.findById("event-1")).thenReturn(Optional.empty());
@@ -252,6 +261,61 @@ class EventModuleImplTest {
         // RegistrationOutcomeTest's job; this only proves the module delegates to it rather than
         // inventing its own classification.
         assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void withdrawReturnsSuccessWhenAnEnrolledStudentIsRemoved() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawFallsBackToLeavingTheWaitlist() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.leaveWaitlist("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawReportsEventCancelledWhenTheFrozenEventIsVisible() {
+        Event cancelled = eventWithStatus(EventStatus.CANCELLED);
+        when(repository.findById("event-1")).thenReturn(Optional.of(cancelled));
+
+        assertThat(module.withdraw("event-1", "student-1"))
+                .isEqualTo(WithdrawalOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void withdrawReportsEventStartedAtTheExactFreezeInstant() {
+        Event started = eventWithStatus(EventStatus.PUBLISHED);
+        when(started.getStartsAt()).thenReturn(NOW);
+        when(repository.findById("event-1")).thenReturn(Optional.of(started));
+
+        assertThat(module.withdraw("event-1", "student-1"))
+                .isEqualTo(WithdrawalOutcome.EVENT_STARTED);
+    }
+
+    @Test
+    void repeatedWithdrawalBeforeTheEventStartsIsIdempotentlySuccessful() {
+        Event upcoming = eventWithStatus(EventStatus.PUBLISHED);
+        when(upcoming.getStartsAt()).thenReturn(NOW.plusSeconds(1));
+        when(repository.findById("event-1")).thenReturn(Optional.of(upcoming));
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawHidesAMissingOrDraftEvent() {
+        when(repository.findById("missing-event")).thenReturn(Optional.empty());
+        Event draft = eventWithStatus(EventStatus.DRAFT);
+        when(repository.findById("draft-event")).thenReturn(Optional.of(draft));
+
+        assertThat(module.withdraw("missing-event", "student-1"))
+                .isEqualTo(WithdrawalOutcome.NOT_FOUND);
+        assertThat(module.withdraw("draft-event", "student-1"))
+                .isEqualTo(WithdrawalOutcome.NOT_FOUND);
     }
 
     @Test

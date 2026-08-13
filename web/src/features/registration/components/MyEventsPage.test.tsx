@@ -34,6 +34,8 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolledCount: 28,
     waitlistCount: 0,
     enrolled: true,
+    enrollmentVia: "DIRECT",
+    waitlistPosition: null,
     ...overrides,
   };
 }
@@ -71,6 +73,18 @@ describe("MyEventsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Robotics Night")).toBeInTheDocument());
     expect(screen.getByText("12 of 40 seats left")).toBeInTheDocument();
+  });
+
+  it("carries the promotion signal in the Students own Event list", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({ items: [view({ enrollmentVia: "PROMOTED" })], page: 0, size: 20, total: 1 }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("You were on the Waitlist — you’re in.")).toBeInTheDocument();
+    });
   });
 
   it("renders an empty state when the Student has not registered for anything", async () => {

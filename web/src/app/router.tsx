@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { EventsBrowsePage } from "../features/events/components/EventsBrowsePage";
+import { OfficerCapacityPage } from "../features/events/components/OfficerCapacityPage";
 import { EventRegistrationPage } from "../features/registration/components/EventRegistrationPage";
 import { MyEventsPage } from "../features/registration/components/MyEventsPage";
 import { RequireAuth } from "./RequireAuth";
@@ -29,6 +30,10 @@ export const router = createBrowserRouter([
       {
         path: "/events/:eventId",
         element: <EventRegistrationPage />,
+      },
+      {
+        path: "/officer/events/:eventId/capacity",
+        element: <OfficerCapacityPage />,
       },
     ],
   },

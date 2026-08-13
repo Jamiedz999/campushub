@@ -4,6 +4,7 @@ import com.campushub.event.EventModule;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
 import com.campushub.shared.ConflictException;
@@ -12,6 +13,7 @@ import com.campushub.shared.NotFoundException;
 import com.campushub.shared.PageResponse;
 import java.time.Clock;
 import java.time.Instant;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +47,13 @@ class EventRegistrationController {
     EventRegistrationView register(@PathVariable String eventId) {
         CurrentActor actor = identityAccessModule.currentActor();
         handle(eventModule.register(eventId, actor.accountId()));
+        return currentView(eventId, actor);
+    }
+
+    @DeleteMapping("/api/events/{eventId}/registration")
+    EventRegistrationView withdraw(@PathVariable String eventId) {
+        CurrentActor actor = identityAccessModule.currentActor();
+        handle(eventModule.withdraw(eventId, actor.accountId()));
         return currentView(eventId, actor);
     }
 
@@ -88,6 +97,19 @@ class EventRegistrationController {
                 throw new ConflictException(
                         ErrorCode.ALREADY_WAITLISTED, "You are already on the Waitlist for this Event.");
             case EVENT_FULL -> throw new ConflictException(ErrorCode.EVENT_FULL, "This Event is full.");
+        }
+    }
+
+    private static void handle(WithdrawalOutcome outcome) {
+        switch (outcome) {
+            case SUCCESS -> {
+                // Nothing to do — the caller re-reads the current view.
+            }
+            case NOT_FOUND -> throw new NotFoundException("No such Event.");
+            case EVENT_CANCELLED ->
+                throw new ConflictException(ErrorCode.EVENT_CANCELLED, "This Event was cancelled.");
+            case EVENT_STARTED ->
+                throw new ConflictException(ErrorCode.EVENT_STARTED, "This Event has already started.");
         }
     }
 }

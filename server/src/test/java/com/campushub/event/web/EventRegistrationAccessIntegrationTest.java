@@ -110,7 +110,7 @@ class EventRegistrationAccessIntegrationTest {
     }
 
     @Test
-    void aLosingWriterAgainstAFullEventIsRefusedAsEventFull() throws Exception {
+    void aLosingWriterAgainstAFullEventJoinsTheWaitlist() throws Exception {
         Session officer = Session.signIn(port, officerEmail, PASSWORD);
         String eventId = publishEvent(officer, 1);
 
@@ -121,8 +121,51 @@ class EventRegistrationAccessIntegrationTest {
         Session studentB = Session.signIn(port, studentBEmail, PASSWORD);
         HttpResponse<String> loser = studentB.post("/events/" + eventId + "/registration", "");
 
-        assertThat(loser.statusCode()).isEqualTo(409);
-        assertThat(loser.body()).contains("\"code\":\"EVENT_FULL\"");
+        assertThat(loser.statusCode()).isEqualTo(200);
+        assertThat(loser.body())
+                .contains("\"enrolled\":false")
+                .contains("\"waitlistPosition\":1");
+    }
+
+    @Test
+    void withdrawingASeatPromotesTheWaitlistHeadAndTheStudentCanSeeWhyTheyAreIn() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = publishEvent(officer, 1);
+        Session studentA = Session.signIn(port, studentAEmail, PASSWORD);
+        Session studentB = Session.signIn(port, studentBEmail, PASSWORD);
+        studentA.post("/events/" + eventId + "/registration", "");
+        studentB.post("/events/" + eventId + "/registration", "");
+
+        HttpResponse<String> withdrawn = studentA.delete("/events/" + eventId + "/registration");
+        HttpResponse<String> promotedView = studentB.get("/events/" + eventId + "/registration");
+
+        assertThat(withdrawn.statusCode()).isEqualTo(200);
+        assertThat(withdrawn.body()).contains("\"enrolled\":false");
+        assertThat(promotedView.body())
+                .contains("\"enrolled\":true")
+                .contains("\"enrollmentVia\":\"PROMOTED\"")
+                .contains("\"waitlistPosition\":null");
+    }
+
+    @Test
+    void leavingTheWaitlistPromotesNobody() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = publishEvent(officer, 1);
+        Session studentA = Session.signIn(port, studentAEmail, PASSWORD);
+        Session studentB = Session.signIn(port, studentBEmail, PASSWORD);
+        studentA.post("/events/" + eventId + "/registration", "");
+        studentB.post("/events/" + eventId + "/registration", "");
+
+        HttpResponse<String> left = studentB.delete("/events/" + eventId + "/registration");
+        HttpResponse<String> enrolledView = studentA.get("/events/" + eventId + "/registration");
+
+        assertThat(left.statusCode()).isEqualTo(200);
+        assertThat(left.body())
+                .contains("\"waitlistPosition\":null")
+                .contains("\"waitlistCount\":0");
+        assertThat(enrolledView.body())
+                .contains("\"enrolled\":true")
+                .contains("\"enrollmentVia\":\"DIRECT\"");
     }
 
     @Test
@@ -197,6 +240,12 @@ class EventRegistrationAccessIntegrationTest {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
                     .POST(BodyPublishers.ofString(jsonBody))
                     .header("Content-Type", "application/json");
+            csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        }
+
+        HttpResponse<String> delete(String path) throws Exception {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path))).DELETE();
             csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
             return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         }
