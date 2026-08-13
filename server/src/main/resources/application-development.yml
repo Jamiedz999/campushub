@@ -1,0 +1,5 @@
+campushub:
+  checkin:
+    # The only secret with a development default, so a fresh clone runs without setting one.
+    # Every other profile falls through to the base application.yml, which has none.
+    hmac-secret: ${CHECKIN_HMAC_SECRET:dev-only-checkin-hmac-secret-do-not-use-in-production}

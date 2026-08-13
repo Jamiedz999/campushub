@@ -25,6 +25,8 @@ class SystemControllerIntegrationTest {
     @DynamicPropertySource
     static void mongoProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.mongodb.uri", () -> MONGO_DB.getConnectionString() + "/campushub-test");
+        registry.add("campushub.security.session-secret", () -> "test-session-secret");
+        registry.add("campushub.checkin.hmac-secret", () -> "test-checkin-hmac-secret");
     }
 
     @LocalServerPort

@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 
 // Every calendar value in CampusHub is derived from these two beans, never from Instant.now() or a hardcoded zone.
 @Configuration
-@EnableConfigurationProperties(CampusProperties.class)
+@EnableConfigurationProperties({CampusProperties.class, SecuritySecrets.class, CheckInSecrets.class})
 public class SharedConfig {
 
     @Bean
