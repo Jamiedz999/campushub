@@ -7,6 +7,8 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
+import com.campushub.event.domain.EventStatus;
+import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -94,6 +96,35 @@ class EventModuleImpl implements EventModule {
 
     private static EventSort defaultSort(String searchTerm) {
         return searchTerm != null && !searchTerm.isBlank() ? EventSort.RELEVANCE : EventSort.STARTS_AT_ASC;
+    }
+
+    @Override
+    public Optional<Event> findForStudent(String eventId) {
+        return repository.findById(eventId).filter(event -> event.getStatus() != EventStatus.DRAFT);
+    }
+
+    @Override
+    public RegistrationOutcome register(String eventId, String studentId) {
+        Instant now = clock.instant();
+        boolean applied = repository.takeSeat(eventId, studentId, now);
+        if (applied) {
+            return RegistrationOutcome.SUCCESS;
+        }
+
+        Optional<Event> event = repository.findById(eventId);
+        // A Draft is invisible to Students the same way it is absent from browse — reported as NOT_FOUND
+        // rather than a Seat Ledger reason, so a guessed id cannot confirm a Draft Event exists.
+        if (event.isEmpty() || event.get().getStatus() == EventStatus.DRAFT) {
+            return RegistrationOutcome.NOT_FOUND;
+        }
+        return RegistrationOutcome.classifyFailure(event.get(), studentId, now);
+    }
+
+    @Override
+    public EventPage findEnrolled(String studentId, int page, int size) {
+        int clampedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int clampedPage = Math.max(page, 0);
+        return repository.findEnrolled(studentId, clampedPage, clampedSize);
     }
 
     // "Attempt first, then read once to classify" — see docs/adr/04-define-registration-capacity-and-waitlist.md.

@@ -2,6 +2,8 @@ package com.campushub.event.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campushub.event.domain.EnrolledEntry;
+import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventPage;
@@ -203,10 +205,11 @@ class EventRepositoryBrowseIntegrationTest {
                 repository.insertDraft(new Event(clubId, title, description, OPENS, CLOSES, startsAt, ENDS, capacity));
         repository.publish(id, Set.of(clubId));
         if (enrolledCount > 0) {
-            List<String> students =
-                    IntStream.range(0, enrolledCount).mapToObj(index -> "student-" + index).toList();
+            List<EnrolledEntry> entries = IntStream.range(0, enrolledCount)
+                    .mapToObj(index -> new EnrolledEntry("student-" + index, EnrollmentVia.DIRECT, OPENS))
+                    .toList();
             mongoTemplate.updateFirst(
-                    new Query(Criteria.where("id").is(id)), new Update().set("enrolled", students), Event.class);
+                    new Query(Criteria.where("id").is(id)), new Update().set("enrolled", entries), Event.class);
         }
         return id;
     }

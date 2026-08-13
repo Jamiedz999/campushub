@@ -3,6 +3,7 @@ package com.campushub.event.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +13,8 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
+import com.campushub.event.domain.EventStatus;
+import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -184,9 +187,109 @@ class EventModuleImplTest {
         assertThat(module.browse(oversized)).isEqualTo(page);
     }
 
+    @Test
+    void findForStudentReturnsAPublishedEvent() {
+        Event event = eventWithStatus(EventStatus.PUBLISHED);
+        when(repository.findById("event-1")).thenReturn(Optional.of(event));
+
+        assertThat(module.findForStudent("event-1")).contains(event);
+    }
+
+    @Test
+    void findForStudentReturnsACancelledEventTooTheFreezeIsNotHidden() {
+        Event event = eventWithStatus(EventStatus.CANCELLED);
+        when(repository.findById("event-1")).thenReturn(Optional.of(event));
+
+        assertThat(module.findForStudent("event-1")).contains(event);
+    }
+
+    @Test
+    void findForStudentHidesADraftTheSameWayBrowseDoes() {
+        Event event = eventWithStatus(EventStatus.DRAFT);
+        when(repository.findById("event-1")).thenReturn(Optional.of(event));
+
+        assertThat(module.findForStudent("event-1")).isEmpty();
+    }
+
+    @Test
+    void findForStudentIsEmptyWhenNoSuchEventExistsAtAll() {
+        when(repository.findById("event-1")).thenReturn(Optional.empty());
+
+        assertThat(module.findForStudent("event-1")).isEmpty();
+    }
+
+    @Test
+    void registerReturnsSuccessWhenTheGuardedWriteApplies() {
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(true);
+
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.SUCCESS);
+    }
+
+    @Test
+    void registerClassifiesAsNotFoundWhenTheEventDoesNotExistAtAll() {
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.findById("event-1")).thenReturn(Optional.empty());
+
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.NOT_FOUND);
+    }
+
+    @Test
+    void registerClassifiesAsNotFoundWhenTheEventIsAStillUnpublishedDraft() {
+        Event draft = eventWithStatus(EventStatus.DRAFT);
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.findById("event-1")).thenReturn(Optional.of(draft));
+
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.NOT_FOUND);
+    }
+
+    @Test
+    void registerDelegatesToRegistrationOutcomeClassifyFailureWhenTheEventIsVisible() {
+        Event cancelled = eventWithStatus(EventStatus.CANCELLED);
+        when(repository.takeSeat("event-1", "student-1", NOW)).thenReturn(false);
+        when(repository.findById("event-1")).thenReturn(Optional.of(cancelled));
+
+        // The specific reason for every combination of Status/timestamps/membership is
+        // RegistrationOutcomeTest's job; this only proves the module delegates to it rather than
+        // inventing its own classification.
+        assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void findEnrolledDelegatesToTheRepository() {
+        EventPage page = new EventPage(List.of(), 0, 20, 0);
+        when(repository.findEnrolled("student-1", 0, 20)).thenReturn(page);
+
+        assertThat(module.findEnrolled("student-1", 0, 20)).isEqualTo(page);
+    }
+
+    @Test
+    void findEnrolledClampsAnOversizedPageSizeToTheHundredCap() {
+        EventPage page = new EventPage(List.of(), 0, 100, 0);
+        when(repository.findEnrolled("student-1", 0, 100)).thenReturn(page);
+
+        assertThat(module.findEnrolled("student-1", 0, 500)).isEqualTo(page);
+    }
+
+    @Test
+    void findEnrolledFloorsANegativePageToZero() {
+        EventPage page = new EventPage(List.of(), 0, 20, 0);
+        when(repository.findEnrolled("student-1", 0, 20)).thenReturn(page);
+
+        assertThat(module.findEnrolled("student-1", -1, 20)).isEqualTo(page);
+    }
+
     private static Event someEvent() {
         return new Event(
                 "club-a", "Title", "Description", NOW, NOW.plusSeconds(10), NOW.plusSeconds(20),
                 NOW.plusSeconds(30), 5);
+    }
+
+    // Event's rich-state constructor is package-private to event.domain on purpose — production code
+    // never builds one outside a guarded MongoTemplate write. A mock stands in for "some Event whose
+    // Status is X" here, since Mockito needs no accessible constructor.
+    private static Event eventWithStatus(EventStatus status) {
+        Event event = mock(Event.class);
+        when(event.getStatus()).thenReturn(status);
+        return event;
     }
 }

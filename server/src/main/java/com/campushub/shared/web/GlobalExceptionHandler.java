@@ -1,5 +1,6 @@
 package com.campushub.shared.web;
 
+import com.campushub.shared.ConflictException;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.EventNotEditableException;
 import com.campushub.shared.NotFoundException;
@@ -39,6 +40,15 @@ class GlobalExceptionHandler {
         problem.setTitle("Event Not Editable");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", ErrorCode.EVENT_NOT_EDITABLE);
+        return problem;
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    ProblemDetail handleConflict(ConflictException exception, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+        problem.setTitle("Conflict");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("code", exception.code());
         return problem;
     }
 
