@@ -1,10 +1,10 @@
 package com.campushub.event.web;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
-import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
 import com.campushub.shared.ConflictException;

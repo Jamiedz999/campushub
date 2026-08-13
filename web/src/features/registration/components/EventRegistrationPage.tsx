@@ -4,8 +4,9 @@ import { describeRegistrationError } from "../describeRegistrationError";
 import { useEventRegistration } from "../hooks/useEventRegistration";
 import { useRegisterForEvent } from "../hooks/useRegisterForEvent";
 import { useWithdrawFromEvent } from "../hooks/useWithdrawFromEvent";
+import type { Phase } from "../../../types/phase";
 
-function canWithdraw(phase: string) {
+function canWithdraw(phase: Phase) {
   return ["SCHEDULED", "REGISTRATION_OPEN", "FULL", "REGISTRATION_CLOSED"].includes(phase);
 }
 
@@ -36,39 +37,15 @@ export function EventRegistrationPage() {
           <p className="text-sm">{describePhase(query.data)}</p>
 
           {query.data.enrolled ? (
-            <>
-              <p className="font-medium text-emerald-700">
-                {query.data.enrollmentVia === "PROMOTED"
-                  ? "You were on the Waitlist — you’re in."
-                  : "You’re registered for this Event."}
-              </p>
-              {canWithdraw(query.data.phase) && (
-                <button
-                  type="button"
-                  onClick={() => withdrawalMutation.mutate()}
-                  disabled={withdrawalMutation.isPending}
-                  className="w-fit rounded border px-4 py-2 disabled:opacity-50"
-                >
-                  {withdrawalMutation.isPending ? "Withdrawing…" : "Withdraw from Event"}
-                </button>
-              )}
-            </>
+            <p className="font-medium text-emerald-700">
+              {query.data.enrollmentVia === "PROMOTED"
+                ? "You were on the Waitlist — you’re in."
+                : "You’re registered for this Event."}
+            </p>
           ) : query.data.waitlistPosition !== null ? (
-            <>
-              <p className="font-medium text-indigo-700">
-                You&rsquo;re number {query.data.waitlistPosition} on the Waitlist.
-              </p>
-              {canWithdraw(query.data.phase) && (
-                <button
-                  type="button"
-                  onClick={() => withdrawalMutation.mutate()}
-                  disabled={withdrawalMutation.isPending}
-                  className="w-fit rounded border px-4 py-2 disabled:opacity-50"
-                >
-                  {withdrawalMutation.isPending ? "Leaving…" : "Leave the Waitlist"}
-                </button>
-              )}
-            </>
+            <p className="font-medium text-indigo-700">
+              You&rsquo;re number {query.data.waitlistPosition} on the Waitlist.
+            </p>
           ) : (
             (query.data.phase === "REGISTRATION_OPEN" || query.data.phase === "FULL") && (
               <button
@@ -84,6 +61,23 @@ export function EventRegistrationPage() {
                     : "Register"}
               </button>
             )
+          )}
+
+          {(query.data.enrolled || query.data.waitlistPosition !== null) && canWithdraw(query.data.phase) && (
+            <button
+              type="button"
+              onClick={() => withdrawalMutation.mutate()}
+              disabled={withdrawalMutation.isPending}
+              className="w-fit rounded border px-4 py-2 disabled:opacity-50"
+            >
+              {query.data.enrolled
+                ? withdrawalMutation.isPending
+                  ? "Withdrawing…"
+                  : "Withdraw from Event"
+                : withdrawalMutation.isPending
+                  ? "Leaving…"
+                  : "Leave the Waitlist"}
+            </button>
           )}
 
           {registrationMutation.status === "error" && (

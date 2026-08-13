@@ -175,6 +175,26 @@ class EventRepositorySeatLedgerIntegrationTest {
     }
 
     @Test
+    void capacityRaiseCannotMoveStartsAtToNowAndPromoteInTheSameWrite() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+        Instant now = WITHIN_WINDOW.plusSeconds(1);
+        EventEdit startNowAndRaiseCapacity =
+                new EventEdit(null, null, null, null, now, null, 2);
+
+        boolean edited = repository.edit(id, Set.of("club-a"), startNowAndRaiseCapacity, now);
+
+        assertThat(edited).isFalse();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getStartsAt()).isEqualTo(STARTS);
+        assertThat(event.getCapacity()).isEqualTo(1);
+        assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
+        assertThat(event.getWaitlist()).containsExactly("student-2");
+        assertThat(event.getPromotedCount()).isZero();
+    }
+
+    @Test
     void withdrawalStillPromotesAfterTheRegistrationWindowCloses() {
         String id = publishedEvent(1);
         repository.takeSeat(id, "student-1", WITHIN_WINDOW);

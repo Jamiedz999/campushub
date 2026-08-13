@@ -1,6 +1,7 @@
 package com.campushub.event.internal;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
@@ -9,7 +10,6 @@ import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
-import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -130,6 +130,12 @@ class EventModuleImpl implements EventModule {
         boolean withdrawn = repository.withdrawEnrolled(eventId, studentId, now);
         if (!withdrawn) {
             withdrawn = repository.leaveWaitlist(eventId, studentId, now);
+            if (!withdrawn) {
+                // A promotion may have moved this Student from waitlist to enrolled between the two
+                // writes. MongoDB serializes writes to the Event document, so one retry observes the
+                // only membership transition that can make both original attempts miss.
+                withdrawn = repository.withdrawEnrolled(eventId, studentId, now);
+            }
         }
         if (withdrawn) {
             return WithdrawalOutcome.SUCCESS;
@@ -139,7 +145,7 @@ class EventModuleImpl implements EventModule {
         if (event.isEmpty() || event.get().getStatus() == EventStatus.DRAFT) {
             return WithdrawalOutcome.NOT_FOUND;
         }
-        return WithdrawalOutcome.classifyFailure(event.get(), now);
+        return classifyWithdrawalFailure(event.get(), now);
     }
 
     @Override
@@ -154,6 +160,17 @@ class EventModuleImpl implements EventModule {
             return EventCommandResult.SUCCESS;
         }
         return existsInScope.getAsBoolean() ? EventCommandResult.NOT_EDITABLE : EventCommandResult.NOT_FOUND;
+    }
+
+    private static WithdrawalOutcome classifyWithdrawalFailure(Event event, Instant now) {
+        if (event.getStatus() == EventStatus.CANCELLED) {
+            return WithdrawalOutcome.EVENT_CANCELLED;
+        }
+        if (!now.isBefore(event.getStartsAt())) {
+            return WithdrawalOutcome.EVENT_STARTED;
+        }
+        // DELETE is idempotent: before the freeze, an already-absent registration is the desired state.
+        return WithdrawalOutcome.SUCCESS;
     }
 
     // Shared by every paged query — see docs/adr/15-define-http-api-and-time-contract.md: zero-indexed

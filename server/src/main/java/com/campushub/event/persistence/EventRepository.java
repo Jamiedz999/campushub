@@ -124,6 +124,11 @@ public class EventRepository {
                             Criteria.where("status").is(EventStatus.DRAFT),
                             Criteria.where("capacity").lt(edit.capacity())));
             guards.add(Criteria.where("startsAt").gt(now));
+            if (edit.startsAt() != null) {
+                guards.add(Criteria.where("$expr")
+                        .is(new Document(
+                                "$gt", List.of(Date.from(edit.startsAt()), Date.from(now)))));
+            }
         }
 
         Criteria filter = Criteria.where("id")
@@ -167,34 +172,15 @@ public class EventRepository {
         Document availablePlaces = new Document(
                 "$max",
                 List.of(0, new Document("$subtract", List.of(newCapacity, new Document("$size", "$enrolled")))));
-        Document promotionCount = new Document(
-                "$min", List.of(new Document("$size", "$waitlist"), availablePlaces));
-        Document promotedEntries = new Document(
-                "$map",
-                new Document("input", new Document("$slice", List.of("$waitlist", promotionCount)))
-                        .append("as", "studentId")
-                        .append(
-                                "in",
-                                new Document("studentId", "$$studentId")
-                                        .append("via", EnrollmentVia.PROMOTED.name())
-                                        .append("at", Date.from(now))));
+        Document studentsToPromote = promotionCount(availablePlaces);
 
         Document setFields = editFields(edit);
         setFields.put("capacity", newCapacity);
-        setFields.put("enrolled", new Document("$concatArrays", List.of("$enrolled", promotedEntries)));
-        Document waitlistSize = new Document("$size", "$waitlist");
         setFields.put(
-                "waitlist",
-                new Document(
-                        "$cond",
-                        List.of(
-                                new Document("$gt", List.of(waitlistSize, 0)),
-                                new Document("$slice", List.of("$waitlist", promotionCount, waitlistSize)),
-                                List.of())));
-        setFields.put(
-                "promotedCount",
-                new Document(
-                        "$add", List.of(new Document("$ifNull", List.of("$promotedCount", 0)), promotionCount)));
+                "enrolled",
+                new Document("$concatArrays", List.of("$enrolled", promotedEntries(studentsToPromote, now))));
+        setFields.put("waitlist", waitlistAfterPromotions(studentsToPromote));
+        setFields.put("promotedCount", promotedCountAfter(studentsToPromote));
 
         return AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
     }
@@ -360,37 +346,53 @@ public class EventRepository {
                 .and("enrolled.studentId")
                 .is(studentId));
 
-        Document hasWaitingStudent = new Document("$gt", List.of(new Document("$size", "$waitlist"), 0));
+        Document studentsToPromote = promotionCount(1);
         Document remainingEnrolled = new Document(
                 "$filter",
                 new Document("input", "$enrolled")
                         .append("as", "entry")
                         .append("cond", new Document("$ne", List.of("$$entry.studentId", studentId))));
-        Document promotedEntry = new Document(
-                        "studentId", new Document("$arrayElemAt", List.of("$waitlist", 0)))
-                .append("via", EnrollmentVia.PROMOTED.name())
-                .append("at", Date.from(now));
-        Document promotedEntries = new Document("$cond", List.of(hasWaitingStudent, List.of(promotedEntry), List.of()));
-        Document remainingWaitlist = new Document(
-                "$cond",
-                List.of(
-                        hasWaitingStudent,
-                        new Document("$slice", List.of("$waitlist", 1, new Document("$size", "$waitlist"))),
-                        List.of()));
-        Document promotionIncrement = new Document("$cond", List.of(hasWaitingStudent, 1, 0));
         Document setFields = new Document(
-                        "enrolled", new Document("$concatArrays", List.of(remainingEnrolled, promotedEntries)))
-                .append("waitlist", remainingWaitlist)
-                .append(
-                        "promotedCount",
+                        "enrolled",
                         new Document(
-                                "$add",
-                                List.of(
-                                        new Document("$ifNull", List.of("$promotedCount", 0)),
-                                        promotionIncrement)));
+                                "$concatArrays",
+                                List.of(remainingEnrolled, promotedEntries(studentsToPromote, now))))
+                .append("waitlist", waitlistAfterPromotions(studentsToPromote))
+                .append("promotedCount", promotedCountAfter(studentsToPromote));
         AggregationUpdate update = AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
 
         return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+    }
+
+    private static Document promotionCount(Object availablePlaces) {
+        return new Document("$min", List.of(new Document("$size", "$waitlist"), availablePlaces));
+    }
+
+    private static Document promotedEntries(Document studentsToPromote, Instant now) {
+        return new Document(
+                "$map",
+                new Document("input", new Document("$slice", List.of("$waitlist", studentsToPromote)))
+                        .append("as", "studentId")
+                        .append(
+                                "in",
+                                new Document("studentId", "$$studentId")
+                                        .append("via", EnrollmentVia.PROMOTED.name())
+                                        .append("at", Date.from(now))));
+    }
+
+    private static Document waitlistAfterPromotions(Document studentsToPromote) {
+        Document waitlistSize = new Document("$size", "$waitlist");
+        return new Document(
+                "$cond",
+                List.of(
+                        new Document("$gt", List.of(studentsToPromote, 0)),
+                        new Document("$slice", List.of("$waitlist", studentsToPromote, waitlistSize)),
+                        "$waitlist"));
+    }
+
+    private static Document promotedCountAfter(Document studentsToPromote) {
+        return new Document(
+                "$add", List.of(new Document("$ifNull", List.of("$promotedCount", 0)), studentsToPromote));
     }
 
     /** The Student's own "my events" list — every Event, whatever its Status, where they hold a Seat. */

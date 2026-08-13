@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
@@ -15,7 +17,6 @@ import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
-import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -276,6 +277,15 @@ class EventModuleImplTest {
         when(repository.leaveWaitlist("event-1", "student-1", NOW)).thenReturn(true);
 
         assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+    }
+
+    @Test
+    void withdrawRetriesSeatRemovalWhenTheStudentIsPromotedDuringTheRequest() {
+        when(repository.withdrawEnrolled("event-1", "student-1", NOW)).thenReturn(false, true);
+        when(repository.leaveWaitlist("event-1", "student-1", NOW)).thenReturn(false);
+
+        assertThat(module.withdraw("event-1", "student-1")).isEqualTo(WithdrawalOutcome.SUCCESS);
+        verify(repository, times(2)).withdrawEnrolled("event-1", "student-1", NOW);
     }
 
     @Test

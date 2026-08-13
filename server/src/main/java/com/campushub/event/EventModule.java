@@ -6,7 +6,6 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
-import com.campushub.event.domain.WithdrawalOutcome;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -20,6 +19,14 @@ import java.util.Set;
 // identityaccess.CurrentActor first and are responsible for the create/edit/publish check that a create
 // command has no existing resource to scope a query by (isOfficerOf the target Club).
 public interface EventModule {
+
+    /** Stable outcomes of deleting the signed-in Student's registration sub-resource. */
+    enum WithdrawalOutcome {
+        SUCCESS,
+        NOT_FOUND,
+        EVENT_CANCELLED,
+        EVENT_STARTED
+    }
 
     /** Creates a Draft in {@code clubId} and returns its id. The caller must already be that Club's Officer. */
     String createDraft(

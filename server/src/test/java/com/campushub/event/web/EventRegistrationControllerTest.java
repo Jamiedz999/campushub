@@ -6,13 +6,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.EnrolledEntry;
 import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
-import com.campushub.event.domain.WithdrawalOutcome;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
 import com.campushub.identityaccess.domain.SystemRole;
