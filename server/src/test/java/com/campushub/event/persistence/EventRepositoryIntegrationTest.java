@@ -7,10 +7,14 @@ import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventStatus;
 import com.mongodb.client.MongoClients;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
@@ -28,11 +32,12 @@ class EventRepositoryIntegrationTest {
     private static final Instant STARTS = Instant.parse("2026-03-20T00:00:00Z");
     private static final Instant ENDS = Instant.parse("2026-03-20T02:00:00Z");
 
+    private MongoTemplate mongoTemplate;
     private EventRepository repository;
 
     @BeforeEach
     void setUp() {
-        MongoTemplate mongoTemplate =
+        mongoTemplate =
                 new MongoTemplate(MongoClients.create(MONGO_DB.getConnectionString()), "event-repository-test");
         repository = new EventRepository(mongoTemplate);
         repository.ensureIndexes();
@@ -139,14 +144,20 @@ class EventRepositoryIntegrationTest {
     @Test
     void officerCancelFreezesTheSeatLedgerRatherThanClearingIt() {
         String id = publishedEvent("club-a", 5);
+        // Seeded directly, bypassing the registration path (Issue #4's territory) — the point here is
+        // only that cancel's guarded update touches `status` and nothing else.
+        mongoTemplate.updateFirst(
+                new Query(Criteria.where("id").is(id)),
+                new Update().set("enrolled", List.of("student-1")).set("waitlist", List.of("student-2")),
+                Event.class);
 
         boolean cancelled = repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60));
 
         assertThat(cancelled).isTrue();
         Event event = repository.findScopedById(id, Set.of("club-a")).orElseThrow();
         assertThat(event.getStatus()).isEqualTo(EventStatus.CANCELLED);
-        assertThat(event.getEnrolled()).isEmpty();
-        assertThat(event.getWaitlist()).isEmpty();
+        assertThat(event.getEnrolled()).containsExactly("student-1");
+        assertThat(event.getWaitlist()).containsExactly("student-2");
     }
 
     @Test

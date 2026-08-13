@@ -119,6 +119,30 @@ class EventOfficerAccessIntegrationTest {
     }
 
     @Test
+    void anOfficerOfClubBCannotEditClubAsDraft() throws Exception {
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId).body());
+
+        Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
+        HttpResponse<String> response = officerB.patch("/events/" + eventId, "{\"title\":\"Hijacked\"}");
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+    }
+
+    @Test
+    void anOfficerOfClubBCannotPublishClubAsDraft() throws Exception {
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId).body());
+
+        Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
+        HttpResponse<String> response = officerB.post("/events/" + eventId + "/publication", "");
+
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+    }
+
+    @Test
     void aStudentWithNoGrantsCannotCreateAnEvent() throws Exception {
         Session student = Session.signIn(port, studentEmail, PASSWORD);
 
