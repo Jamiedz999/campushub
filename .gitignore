@@ -10,8 +10,10 @@ server/.mvn/wrapper/maven-wrapper.jar
 web/node_modules/
 web/dist/
 web/dist-ssr/
+web/coverage/
 web/cypress/videos/
 web/cypress/screenshots/
+web/*.tsbuildinfo
 
 # Logs
 *.log

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: server/pom.xml
+
+      - name: Server build contract
+        working-directory: server
+        run: ./mvnw --batch-mode verify
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web install
+        run: npm --prefix web ci
+
+      - name: Web build contract
+        run: npm --prefix web run check
+
+      - name: Prepare environment for compose
+        run: cp .env.example .env
+
+      - name: Compose the stack
+        run: docker compose up --build --wait
+
+      - name: Prove the app and API are served from one origin
+        run: |
+          curl --fail --silent http://localhost:8080/actuator/health
+          curl --fail --silent http://localhost:8080/api/system
+
+      - name: Dump container logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down

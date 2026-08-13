@@ -75,6 +75,8 @@ Rejected: storing the UTC offset alongside each booking, which makes the overlap
 
 **A note on `Europe/Dublin` specifically.** In tzdata, Irish Standard Time (UTC+1, summer) is modelled as the *standard* offset and winter as a **negative** daylight offset — `dst()` returns `-1 hour` in January and `0` in July. `java.time` conversions are unaffected, but older calendar APIs report daylight saving inverted. The implementation owes one assertion pinning the JDK's actual behaviour rather than trusting either reading of it.
 
+**Amendment — OpenJDK ships the opposite reading (implementation Issue #13, 2026-08-13).** The paragraph above describes IANA tzdata's *vanguard* format, which is what a Python `zoneinfo` check against this machine's system tzdata returns. Pinning the assertion against the actual runtime — OpenJDK 25's bundled `tzdb.dat` — showed the *rearguard* format instead: `Europe/Dublin`'s standard offset is UTC+0 year-round, and summer carries the **positive** one-hour daylight offset, in both `java.time` and legacy `Calendar`/`TimeZone`. The two formats are both real IANA output; which one a given runtime embeds is the fact that matters, and OpenJDK embeds rearguard. Nothing about the DST-transition Slot rule changes — the gap and the overlap still fall on the same calendar dates — only which offset is called "standard" does. `CampusZoneDstTest` in `server/` pins the rearguard reading actually observed, not the vanguard reading assumed here originally.
+
 ### URL and payload conventions
 
 - Resource paths are plural nouns under `/api`: `/api/events`, `/api/events/{eventId}/registrations`, `/api/venues/{venueId}/days/{date}`.

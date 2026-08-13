@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: campushub-server
+  mongodb:
+    uri: ${MONGODB_URI}
+  data:
+    mongodb:
+      auto-index-creation: false
+
+campushub:
+  zone: Europe/Dublin
+  security:
+    # The empty default (rather than an unset placeholder) guarantees @NotBlank actually sees a
+    # blank value when the env var is absent — an unresolved ${...} with no default is left as
+    # its literal placeholder text, not blank, and would silently pass validation.
+    session-secret: ${SESSION_SECRET:}
+  checkin:
+    hmac-secret: ${CHECKIN_HMAC_SECRET:}
+
+mongock:
+  migration-scan-package:
+    - com.campushub
+  transactional: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
