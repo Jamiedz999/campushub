@@ -20,7 +20,8 @@ This is the single implementation source for the Core stack, repository shape an
 | Frontend | Node 24 LTS, React 19.2 current patch, strict TypeScript, Vite 8.1, React Router, TanStack Query over **axios**, Zustand, Tailwind CSS |
 | Charts | Apache ECharts via `echarts-for-react` |
 | Realtime | Spring WebSocket (STOMP-free, raw `WebSocketHandler`) with an **in-process broadcast**. No MongoDB change streams |
-| Verification | JUnit 5, AssertJ, Mockito, Testcontainers MongoDB, Vitest, Testing Library, **Cypress** |
+| Structure | **Spring Modulith 2.1** verifying module boundaries and generating the module documentation, plus custom **ArchUnit** rules for document ownership. ESLint `import/no-restricted-paths` on the frontend |
+| Verification | JUnit 5, AssertJ, Mockito, Testcontainers MongoDB, Vitest, Testing Library, **Cypress**. Surefire runs `*Test`, Failsafe runs `*IntegrationTest` |
 | Quality gates | **JaCoCo ≥ 90% line and branch** backend, Vitest ≥ 90% frontend global, Checkstyle, SpotBugs, ESLint, all failing the build |
 | Packaging | Docker Compose for local MongoDB; one multi-stage image containing the Boot app and the compiled React assets |
 | Operations | Actuator health, request correlation, redacted logs. No monitoring platform in Core |
@@ -79,6 +80,48 @@ The backend is one executable divided by **business** module, never by technical
 `checkin` verifies tokens but does **not** write attendance — it hands a verified `(eventId, studentId)` to `event`, which performs the guarded write. That is the seam: presence proof and Seat Ledger ownership are different responsibilities.
 
 Implementation classes, `MongoTemplate` access and web DTOs stay package-private where Java allows. Controllers call module interfaces; no module reaches into another's collection. A `shared` package may hold `Clock`, identifiers and error primitives — never generic business services or speculative abstractions.
+
+### Inside a module, and what enforces it
+
+Reasoning in [ADR 17](../../adr/17-define-code-structure-and-its-enforcement.md). A module is a direct sub-package of `com.campushub`, and **its `*Module` interface is its only public type**:
+
+```text
+com.campushub
+├── CampusHubApplication.java
+├── shared/                     Clock, identifiers, error primitives
+├── system/
+└── event/
+    ├── EventModule.java        the module's only public type
+    ├── domain/                 the Event document, Phase derivation, Seat Ledger invariants
+    ├── persistence/            MongoTemplate access
+    ├── web/                    controller and DTOs
+    └── internal/
+```
+
+**The structure is enforced by tests, not by convention** — it is the one load-bearing rule that was previously left to discipline, and the atomicity argument rests on it:
+
+- **`ApplicationModules.of(CampusHubApplication.class).verify()`** — Spring Modulith checks that no module reaches past a peer's interface, and generates the module documentation and component diagram from the code.
+- **ArchUnit: no type outside a module's `persistence` package may reference `MongoTemplate`.**
+- **ArchUnit: no module may reference another module's document types.**
+
+The last two are what make "two modules never write the same document" a build failure rather than a sentence.
+
+### `web/src`
+
+```text
+web/src
+├── app/            router, providers, entry
+├── features/       events/ registration/ checkin/ dashboard/ — each with api/ components/ hooks/ types.ts
+├── components/     cross-feature presentational UI
+├── lib/            the axios instance, the query client, error normalisation
+└── types/
+```
+
+**A feature may not import from another feature**; shared code moves into `lib` or `components`, or the two are composed at the route level. Enforced by ESLint `import/no-restricted-paths`, failing `npm run check`.
+
+### Where tests live
+
+**Concurrency tests live beside their module and carry `@Tag("concurrency")`**, so they are local to their owner and still runnable as one suite — which is what [the hardening Issue](https://github.com/Jamiedz999/campushub/issues/17) needs without moving them away from the code they cover.
 
 Create a seam only where it hides real complexity or has a genuine second implementation. For Core:
 
