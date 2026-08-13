@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: campushub-server
+  mongodb:
+    uri: ${MONGODB_URI}
+  data:
+    mongodb:
+      auto-index-creation: false
+
+campushub:
+  zone: Europe/Dublin
+
+mongock:
+  migration-scan-package:
+    - com.campushub
+  transactional: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
