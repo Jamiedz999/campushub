@@ -63,6 +63,22 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
 
+    <!-- Authentication and sessions -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <!-- No GA release of this starter exists yet for the Boot 4.1 line — the newest is this
+         milestone. Verified it boots cleanly against our actual resolved versions (spring-session-core
+         4.1.0, spring-data-mongodb 5.1.0) and genuinely creates a MongoIndexedSessionRepository with
+         its TTL index; one harmless startup warning about a stale @AutoConfigureAfter type reference.
+         Revisit when a GA lands or at the Issue #11 hardening pass. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-session-data-mongodb</artifactId>
+      <version>4.0.0-M3</version>
+    </dependency>
+
     <!-- Persistence -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -96,6 +112,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

@@ -15,6 +15,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 
+// /api/system stays public even after Issue #2 added Security — see SecurityConfig's comment: it is
+// build/version/server-time, the same operational-status category as /actuator/health, and the Core
+// build contract's own same-origin smoke test (TECHNICAL-BASELINE.md, CI) curls it unauthenticated.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 class SystemControllerIntegrationTest {
@@ -36,7 +39,7 @@ class SystemControllerIntegrationTest {
             HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
 
     @Test
-    void returnsRoleFreeSystemStatus() throws Exception {
+    void returnsRoleFreeSystemStatusWithoutSigningIn() throws Exception {
         HttpResponse<String> response = get("/api/system");
 
         assertThat(response.statusCode()).isEqualTo(200);
@@ -45,7 +48,7 @@ class SystemControllerIntegrationTest {
     }
 
     @Test
-    void generatesTheOpenApiDocument() throws Exception {
+    void generatesTheOpenApiDocumentWithoutSigningIn() throws Exception {
         HttpResponse<String> response = get("/v3/api-docs");
 
         assertThat(response.statusCode()).isEqualTo(200);
@@ -54,7 +57,7 @@ class SystemControllerIntegrationTest {
     }
 
     @Test
-    void servesSwaggerUi() throws Exception {
+    void servesSwaggerUiWithoutSigningIn() throws Exception {
         HttpResponse<String> response = get("/swagger-ui.html");
 
         assertThat(response.statusCode()).isEqualTo(200);

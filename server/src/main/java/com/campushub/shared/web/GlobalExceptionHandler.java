@@ -1,6 +1,7 @@
 package com.campushub.shared.web;
 
 import com.campushub.shared.ErrorCode;
+import com.campushub.shared.NotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,15 @@ class GlobalExceptionHandler {
         problem.setTitle("Validation Failed");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED);
+        return problem;
+    }
+
+    @ExceptionHandler(NotFoundException.class)
+    ProblemDetail handleNotFound(NotFoundException exception, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Resource not found.");
+        problem.setTitle("Not Found");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("code", ErrorCode.NOT_FOUND);
         return problem;
     }
 
