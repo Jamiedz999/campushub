@@ -1,6 +1,10 @@
 package com.campushub.event.internal;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.FormUpdateOutcome;
+import com.campushub.event.EventModule.RegistrationForm;
+import com.campushub.event.EventModule.SeatRequestOutcome;
+import com.campushub.event.EventModule.SeatRequestResult;
 import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
@@ -9,6 +13,7 @@ import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
+import com.campushub.event.domain.Phase;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
 import java.time.Clock;
@@ -55,6 +60,24 @@ class EventModuleImpl implements EventModule {
     public EventCommandResult edit(String eventId, Set<String> callerOfficerClubIds, EventEdit edit) {
         boolean applied = repository.edit(eventId, callerOfficerClubIds, edit, clock.instant());
         return classify(applied, () -> repository.existsScoped(eventId, callerOfficerClubIds));
+    }
+
+    @Override
+    public FormUpdateOutcome updateRegistrationForm(
+            String eventId, Set<String> callerOfficerClubIds, RegistrationForm registrationForm) {
+        RegistrationFormDefinitionValidator.validate(registrationForm);
+        boolean applied = repository.updateRegistrationForm(
+                eventId, callerOfficerClubIds, registrationForm, clock.instant());
+        if (applied) {
+            return FormUpdateOutcome.SUCCESS;
+        }
+        Optional<Event> event = repository.findScopedById(eventId, callerOfficerClubIds);
+        if (event.isEmpty()) {
+            return FormUpdateOutcome.NOT_FOUND;
+        }
+        return event.get().isRegistrationFormLocked()
+                ? FormUpdateOutcome.FORM_LOCKED
+                : FormUpdateOutcome.NOT_EDITABLE;
     }
 
     @Override
@@ -105,6 +128,26 @@ class EventModuleImpl implements EventModule {
     }
 
     @Override
+    public Optional<StudentRegistrationEvent> findRegistrationForStudent(
+            String eventId, String studentId) {
+        return findForStudent(eventId).map(event -> studentRegistrationEvent(event, studentId));
+    }
+
+    @Override
+    public Optional<OfficerRegistrationEvent> findRegistrationForOfficer(
+            String eventId, Set<String> callerOfficerClubIds) {
+        return repository.findScopedById(eventId, callerOfficerClubIds).map(event ->
+                new OfficerRegistrationEvent(
+                        event.getId(),
+                        event.getTitle(),
+                        event.getRegistrationForm(),
+                        event.getEnrolled().stream()
+                                .map(entry -> new OfficerEnrollment(
+                                        entry.studentId(), entry.via().name(), entry.at(), entry.enrollmentVersion()))
+                                .toList()));
+    }
+
+    @Override
     public RegistrationOutcome register(String eventId, String studentId) {
         Instant now = clock.instant();
         boolean applied = repository.takeSeat(eventId, studentId, now);
@@ -122,6 +165,30 @@ class EventModuleImpl implements EventModule {
             return RegistrationOutcome.NOT_FOUND;
         }
         return RegistrationOutcome.classifyFailure(event.get(), studentId, now);
+    }
+
+    @Override
+    public SeatRequestResult requestSeat(
+            String eventId, String studentId, int expectedFormRevision) {
+        Instant now = clock.instant();
+        Optional<Long> enrollmentVersion =
+                repository.takeSeatForForm(eventId, studentId, now, expectedFormRevision);
+        if (enrollmentVersion.isPresent()) {
+            return new SeatRequestResult(SeatRequestOutcome.SUCCESS, enrollmentVersion.get());
+        }
+
+        Optional<Event> event = repository.findById(eventId);
+        if (event.isEmpty() || event.get().getStatus() == EventStatus.DRAFT) {
+            return new SeatRequestResult(SeatRequestOutcome.NOT_FOUND, null);
+        }
+        if (event.get().getRegistrationFormRevision() != expectedFormRevision) {
+            return new SeatRequestResult(SeatRequestOutcome.FORM_CHANGED, null);
+        }
+        if (repository.joinWaitlist(eventId, studentId, now)) {
+            return new SeatRequestResult(SeatRequestOutcome.SUCCESS, null);
+        }
+        RegistrationOutcome classified = RegistrationOutcome.classifyFailure(event.get(), studentId, now);
+        return new SeatRequestResult(SeatRequestOutcome.valueOf(classified.name()), null);
     }
 
     @Override
@@ -151,6 +218,45 @@ class EventModuleImpl implements EventModule {
     @Override
     public EventPage findEnrolled(String studentId, int page, int size) {
         return repository.findEnrolled(studentId, clampPage(page), clampSize(size));
+    }
+
+    @Override
+    public StudentRegistrationEventPage findEnrolledRegistrations(
+            String studentId, int page, int size) {
+        EventPage result = findEnrolled(studentId, page, size);
+        return new StudentRegistrationEventPage(
+                result.items().stream()
+                        .map(event -> studentRegistrationEvent(event, studentId))
+                        .toList(),
+                result.page(),
+                result.size(),
+                result.total());
+    }
+
+    private StudentRegistrationEvent studentRegistrationEvent(Event event, String studentId) {
+        var enrollment = event.getEnrolled().stream()
+                .filter(entry -> entry.studentId().equals(studentId))
+                .findFirst();
+        int waitlistIndex = event.getWaitlist().indexOf(studentId);
+        return new StudentRegistrationEvent(
+                event.getId(),
+                event.getClubId(),
+                event.getTitle(),
+                event.getDescription(),
+                Phase.of(event, clock.instant()).name(),
+                event.getRegistrationOpensAt(),
+                event.getRegistrationClosesAt(),
+                event.getStartsAt(),
+                event.getEndsAt(),
+                event.getCapacity(),
+                event.getEnrolled().size(),
+                event.getWaitlist().size(),
+                enrollment.isPresent(),
+                enrollment.map(entry -> entry.via().name()).orElse(null),
+                enrollment.map(entry -> entry.enrollmentVersion()).orElse(null),
+                waitlistIndex < 0 ? null : waitlistIndex + 1,
+                event.getRegistrationForm(),
+                event.getRegistrationFormRevision());
     }
 
     // "Attempt first, then read once to classify" — see docs/adr/04-define-registration-capacity-and-waitlist.md.

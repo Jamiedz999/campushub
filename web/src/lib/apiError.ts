@@ -7,6 +7,7 @@ interface ApiErrorShape {
   status: number;
   title: string;
   detail: string;
+  fieldErrors?: Record<string, string>;
 }
 
 /**
@@ -19,6 +20,7 @@ export class ApiError extends Error implements ApiErrorShape {
   readonly status: number;
   readonly title: string;
   readonly detail: string;
+  readonly fieldErrors: Record<string, string>;
 
   constructor(shape: ApiErrorShape) {
     super(shape.detail);
@@ -27,6 +29,7 @@ export class ApiError extends Error implements ApiErrorShape {
     this.status = shape.status;
     this.title = shape.title;
     this.detail = shape.detail;
+    this.fieldErrors = shape.fieldErrors ?? {};
   }
 }
 
@@ -35,6 +38,20 @@ interface ProblemDetailBody {
   title?: unknown;
   detail?: unknown;
   status?: unknown;
+  fieldErrors?: unknown;
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (typeof value !== "object" || value === null) {
+    return result;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") {
+      result[key] = entry;
+    }
+  }
+  return result;
 }
 
 function isProblemDetailBody(data: unknown): data is ProblemDetailBody {
@@ -57,6 +74,7 @@ export function normalizeApiError(error: unknown): ApiError {
         status: typeof data.status === "number" ? data.status : (error.response?.status ?? 0),
         title: typeof data.title === "string" ? data.title : "Request Failed",
         detail: typeof data.detail === "string" ? data.detail : error.message,
+        fieldErrors: stringMap(data.fieldErrors),
       });
     }
   }

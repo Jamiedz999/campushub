@@ -1,6 +1,8 @@
 package com.campushub.identityaccess;
 
 import com.campushub.identityaccess.domain.CurrentActor;
+import java.util.Map;
+import java.util.Set;
 
 public interface IdentityAccessModule {
 
@@ -10,4 +12,7 @@ public interface IdentityAccessModule {
      * docs/adr/08-define-roles-and-resource-authorization.md.
      */
     CurrentActor currentActor();
+
+    /** Display names for Officer-only Registration answer reports; absent ids remain absent. */
+    Map<String, String> displayNames(Set<String> accountIds);
 }

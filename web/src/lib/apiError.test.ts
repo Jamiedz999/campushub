@@ -17,6 +17,7 @@ describe("normalizeApiError", () => {
         detail: "The event is full.",
         instance: "/api/events/abc123/registration",
         code: "EVENT_FULL",
+        fieldErrors: { teamName: "Required." },
       },
     });
 
@@ -27,6 +28,7 @@ describe("normalizeApiError", () => {
     expect(result.status).toBe(409);
     expect(result.title).toBe("Conflict");
     expect(result.detail).toBe("The event is full.");
+    expect(result.fieldErrors).toEqual({ teamName: "Required." });
   });
 
   it("falls back to the network error code when the axios error carries no problem+json body", () => {

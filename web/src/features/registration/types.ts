@@ -4,6 +4,7 @@
 // features/events rather than duplicated — a feature may not import from another feature, but shared
 // code may move down into types/lib — see docs/planning/implementation/TECHNICAL-BASELINE.md.
 import type { Phase } from "../../types/phase";
+import type { RegistrationAnswers, RegistrationForm } from "../../types/registrationForm";
 
 export type EnrollmentVia = "DIRECT" | "PROMOTED";
 
@@ -26,4 +27,35 @@ export interface EventRegistrationView {
   enrollmentVia: EnrollmentVia | null;
   /** One-based position for this Student only; null when they are not waiting. */
   waitlistPosition: number | null;
+  registrationForm: RegistrationForm;
+  /** null while waiting; false means the Seat is safe but the separate answer write failed. */
+  answersSaved: boolean | null;
+  /** The signed-in Student's own saved answers; empty for other states. */
+  answers: RegistrationAnswers;
+}
+
+export interface OfficerAnswer {
+  studentId: string;
+  studentDisplayName: string;
+  enrollmentVia: EnrollmentVia;
+  enrolledAt: string;
+  answersSaved: boolean;
+  answers: RegistrationAnswers;
+}
+
+export interface OptionCount {
+  fieldId: string;
+  option: string;
+  count: number;
+}
+
+export interface OfficerAnswersView {
+  eventId: string;
+  eventTitle: string;
+  registrationForm: RegistrationForm;
+  items: OfficerAnswer[];
+  page: number;
+  size: number;
+  total: number;
+  optionCounts: OptionCount[];
 }

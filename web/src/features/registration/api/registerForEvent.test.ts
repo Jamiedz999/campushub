@@ -22,8 +22,10 @@ describe("registerForEvent", () => {
     const view = { id: "event-1", enrolled: true };
     const postSpy = vi.spyOn(httpClient, "post").mockResolvedValue(response(view));
 
-    await expect(registerForEvent("event-1")).resolves.toEqual(view);
+    await expect(registerForEvent("event-1", { teamName: "Circuit Breakers" })).resolves.toEqual(view);
 
-    expect(postSpy).toHaveBeenCalledWith("/events/event-1/registration");
+    expect(postSpy).toHaveBeenCalledWith("/events/event-1/registration", {
+      answers: { teamName: "Circuit Breakers" },
+    });
   });
 });

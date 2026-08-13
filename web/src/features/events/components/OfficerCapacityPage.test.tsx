@@ -37,6 +37,8 @@ function view(overrides: Partial<EventOfficerView>): EventOfficerView {
     promotedCount: 0,
     everQueuedCount: 4,
     waitlistConversion: 0,
+    registrationForm: { fields: [] },
+    registrationFormLocked: false,
     ...overrides,
   };
 }

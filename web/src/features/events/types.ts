@@ -3,6 +3,7 @@
 // features/registration, which renders the same Phase for a single Event.
 export type { Phase } from "../../types/phase";
 import type { Phase } from "../../types/phase";
+import type { RegistrationForm } from "../../types/registrationForm";
 
 export type EventSort = "STARTS_AT_ASC" | "STARTS_AT_DESC" | "CREATED_AT_DESC" | "RELEVANCE";
 export type EventStatus = "DRAFT" | "PUBLISHED" | "CANCELLED";
@@ -38,4 +39,6 @@ export interface EventOfficerView extends EventBrowseItem {
   promotedCount: number;
   everQueuedCount: number;
   waitlistConversion: number;
+  registrationForm: RegistrationForm;
+  registrationFormLocked: boolean;
 }

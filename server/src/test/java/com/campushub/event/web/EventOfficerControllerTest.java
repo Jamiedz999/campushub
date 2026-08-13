@@ -8,6 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.FormUpdateOutcome;
+import com.campushub.event.EventModule.RegistrationForm;
+import com.campushub.event.EventModule.ShortTextField;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventCommandResult;
 import com.campushub.identityaccess.IdentityAccessModule;
@@ -19,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -127,6 +131,35 @@ class EventOfficerControllerTest {
                 .thenReturn(EventCommandResult.NOT_EDITABLE);
 
         assertThatThrownBy(() -> controller.edit("event-1", request)).isInstanceOf(EventNotEditableException.class);
+    }
+
+    @Test
+    void anOfficerReplacesTheOrderedRegistrationFormBeforeItLocks() {
+        actingAs(officer("club-a"));
+        UpdateRegistrationFormRequest request = new UpdateRegistrationFormRequest(List.of(
+                new ShortTextField("name", "Preferred name", null, true, 80)));
+        when(eventModule.updateRegistrationForm(
+                        "event-1", Set.of("club-a"), request.toRegistrationForm()))
+                .thenReturn(FormUpdateOutcome.SUCCESS);
+        when(eventModule.findForOfficer("event-1", Set.of("club-a")))
+                .thenReturn(Optional.of(someEvent()));
+
+        EventOfficerResponse response = controller.updateRegistrationForm("event-1", request);
+
+        assertThat(response.registrationForm()).isEqualTo(RegistrationForm.empty());
+    }
+
+    @Test
+    void editingAFormAfterTheFirstRegistrationReportsFormLocked() {
+        actingAs(officer("club-a"));
+        UpdateRegistrationFormRequest request = new UpdateRegistrationFormRequest(List.of());
+        when(eventModule.updateRegistrationForm("event-1", Set.of("club-a"), RegistrationForm.empty()))
+                .thenReturn(FormUpdateOutcome.FORM_LOCKED);
+
+        assertThatThrownBy(() -> controller.updateRegistrationForm("event-1", request))
+                .isInstanceOf(com.campushub.shared.ConflictException.class)
+                .extracting(exception -> ((com.campushub.shared.ConflictException) exception).code())
+                .isEqualTo(com.campushub.shared.ErrorCode.FORM_LOCKED);
     }
 
     @Test

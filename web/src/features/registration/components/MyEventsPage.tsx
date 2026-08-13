@@ -39,6 +39,14 @@ export function MyEventsPage() {
                   {item.enrollmentVia === "PROMOTED" && (
                     <p className="font-medium text-emerald-700">You were on the Waitlist — you&rsquo;re in.</p>
                   )}
+                  {item.answersSaved === false && (
+                    <div className="mt-2 flex items-center gap-3 text-sm text-amber-800">
+                      <span>Answers still need saving.</span>
+                      <Link to={`/events/${item.id}`} className="font-medium underline">
+                        Retry answers
+                      </Link>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

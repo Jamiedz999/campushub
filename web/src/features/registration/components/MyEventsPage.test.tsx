@@ -36,6 +36,9 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolled: true,
     enrollmentVia: "DIRECT",
     waitlistPosition: null,
+    registrationForm: { fields: [] },
+    answersSaved: true,
+    answers: {},
     ...overrides,
   };
 }
@@ -85,6 +88,17 @@ describe("MyEventsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("You were on the Waitlist — you’re in.")).toBeInTheDocument();
     });
+  });
+
+  it("flags a safe Seat whose answers still need retrying", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({ items: [view({ answersSaved: false })], page: 0, size: 20, total: 1 }),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Answers still need saving.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Retry answers" })).toHaveAttribute("href", "/events/event-1");
   });
 
   it("renders an empty state when the Student has not registered for anything", async () => {

@@ -1,8 +1,10 @@
 import { createBrowserRouter } from "react-router";
 import { EventsBrowsePage } from "../features/events/components/EventsBrowsePage";
 import { OfficerCapacityPage } from "../features/events/components/OfficerCapacityPage";
+import { OfficerRegistrationFormPage } from "../features/events/components/OfficerRegistrationFormPage";
 import { EventRegistrationPage } from "../features/registration/components/EventRegistrationPage";
 import { MyEventsPage } from "../features/registration/components/MyEventsPage";
+import { OfficerRegistrationAnswersPage } from "../features/registration/components/OfficerRegistrationAnswersPage";
 import { RequireAuth } from "./RequireAuth";
 import { SignInPage } from "./SignInPage";
 import { SystemStatusPage } from "./SystemStatusPage";
@@ -34,6 +36,14 @@ export const router = createBrowserRouter([
       {
         path: "/officer/events/:eventId/capacity",
         element: <OfficerCapacityPage />,
+      },
+      {
+        path: "/officer/events/:eventId/registration-form",
+        element: <OfficerRegistrationFormPage />,
+      },
+      {
+        path: "/officer/events/:eventId/registration-answers",
+        element: <OfficerRegistrationAnswersPage />,
       },
     ],
   },

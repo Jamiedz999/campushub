@@ -1,5 +1,6 @@
 package com.campushub.event.persistence;
 
+import com.campushub.event.EventModule.RegistrationForm;
 import com.campushub.event.domain.EnrolledEntry;
 import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.bson.Document;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
@@ -70,9 +72,56 @@ public class EventRepository {
         mongoTemplate.indexOps(Event.class).createIndex(new Index().on("enrolled.studentId", Sort.Direction.ASC));
     }
 
+    /** Mongock-owned defaults for Event documents written before registration forms existed. */
+    public void initializeRegistrationForms() {
+        mongoTemplate.updateMulti(
+                Query.query(Criteria.where("registrationForm").is(null)),
+                new Update().set("registrationForm", RegistrationForm.empty()),
+                Event.class);
+        mongoTemplate.updateMulti(
+                Query.query(Criteria.where("registrationFormRevision").is(null)),
+                new Update().set("registrationFormRevision", 0),
+                Event.class);
+        mongoTemplate.updateMulti(
+                Query.query(Criteria.where("registrationFormLocked").is(null).and("enrolled.0").exists(true)),
+                new Update().set("registrationFormLocked", true),
+                Event.class);
+        mongoTemplate.updateMulti(
+                Query.query(Criteria.where("registrationFormLocked").is(null)),
+                new Update().set("registrationFormLocked", false),
+                Event.class);
+    }
+
     /** Inserts a new Draft and returns its generated id. */
     public String insertDraft(Event draft) {
         return mongoTemplate.insert(draft).getId();
+    }
+
+    /**
+     * Replaces the ordered form definition only while it is still safe for every future answer to use
+     * that one definition. The lock and lifecycle checks live in this write, so an Officer can never
+     * win a read-then-write race against the first Student taking a Seat.
+     */
+    public boolean updateRegistrationForm(
+            String eventId, Set<String> clubIds, RegistrationForm form, Instant now) {
+        Criteria editableLifecycle = new Criteria()
+                .orOperator(
+                        Criteria.where("status").is(EventStatus.DRAFT),
+                        new Criteria()
+                                .andOperator(
+                                        Criteria.where("status").is(EventStatus.PUBLISHED),
+                                        Criteria.where("startsAt").gt(now)));
+        Criteria filter = new Criteria()
+                .andOperator(
+                        Criteria.where("id").is(eventId),
+                        Criteria.where("clubId").in(clubIds),
+                        Criteria.where("registrationFormLocked").ne(true),
+                        Criteria.where("enrolled.0").exists(false),
+                        editableLifecycle);
+        Update update = new Update()
+                .set("registrationForm", form)
+                .inc("registrationFormRevision", 1);
+        return mongoTemplate.updateFirst(new Query(filter), update, Event.class).getModifiedCount() > 0;
     }
 
     /** Scoped by the caller's Club grants, per docs/adr/08-define-roles-and-resource-authorization.md. */
@@ -174,15 +223,25 @@ public class EventRepository {
                 List.of(0, new Document("$subtract", List.of(newCapacity, new Document("$size", "$enrolled")))));
         Document studentsToPromote = promotionCount(availablePlaces);
 
-        Document setFields = editFields(edit);
-        setFields.put("capacity", newCapacity);
-        setFields.put(
-                "enrolled",
-                new Document("$concatArrays", List.of("$enrolled", promotedEntries(studentsToPromote, now))));
-        setFields.put("waitlist", waitlistAfterPromotions(studentsToPromote));
-        setFields.put("promotedCount", promotedCountAfter(studentsToPromote));
+        Document eventFields = editFields(edit);
+        eventFields.put("capacity", newCapacity);
+        eventFields.put("lastEnrollmentVersion", nextEnrollmentVersion());
 
-        return AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
+        Document ledgerFields = new Document();
+        ledgerFields.put(
+                "enrolled",
+                new Document(
+                        "$concatArrays",
+                        List.of(
+                                "$enrolled",
+                                promotedEntries(
+                                        studentsToPromote, now, "$lastEnrollmentVersion"))));
+        ledgerFields.put("waitlist", waitlistAfterPromotions(studentsToPromote));
+        ledgerFields.put("promotedCount", promotedCountAfter(studentsToPromote));
+
+        return AggregationUpdate.from(List.of(
+                Aggregation.stage(new Document("$set", eventFields)),
+                Aggregation.stage(new Document("$set", ledgerFields))));
     }
 
     private static Document editFields(EventEdit edit) {
@@ -265,6 +324,24 @@ public class EventRepository {
      * anything in this method.
      */
     public boolean takeSeat(String eventId, String studentId, Instant now) {
+        return takeSeat(eventId, studentId, now, null).isPresent();
+    }
+
+    /**
+     * Takes a Seat only if the form revision is still the one the Registration module validated.
+     * Whichever write wins first — this one or an Officer form edit — forces the loser to retry from a
+     * fresh definition, so answers can never be stored against a definition that did not validate them.
+     */
+    public Optional<Long> takeSeatForForm(
+            String eventId, String studentId, Instant now, int expectedFormRevision) {
+        return takeSeat(eventId, studentId, now, Integer.valueOf(expectedFormRevision));
+    }
+
+    private Optional<Long> takeSeat(
+            String eventId,
+            String studentId,
+            Instant now,
+            Integer expectedFormRevision) {
         Criteria filter = Criteria.where("id")
                 .is(eventId)
                 .and("status")
@@ -281,13 +358,35 @@ public class EventRepository {
                 .ne(studentId)
                 .and("$expr")
                 .is(new Document("$lt", List.of(new Document("$size", "$enrolled"), "$capacity")));
+        if (expectedFormRevision != null) {
+            filter = filter.and("registrationFormRevision").is(expectedFormRevision);
+        }
 
-        Update update = new Update().push("enrolled", new EnrolledEntry(studentId, EnrollmentVia.DIRECT, now));
+        Document eventFields = new Document("lastEnrollmentVersion", nextEnrollmentVersion())
+                .append("registrationFormLocked", true);
+        Document entry = new Document("studentId", studentId)
+                .append("via", EnrollmentVia.DIRECT.name())
+                .append("at", Date.from(now))
+                .append("enrollmentVersion", "$lastEnrollmentVersion");
+        Document ledgerFields = new Document(
+                "enrolled",
+                new Document("$concatArrays", List.of("$enrolled", List.of(entry))));
+        AggregationUpdate update = AggregationUpdate.from(List.of(
+                Aggregation.stage(new Document("$set", eventFields)),
+                Aggregation.stage(new Document("$set", ledgerFields))));
 
-        return mongoTemplate
-                        .updateFirst(new Query(filter), update, Event.class)
-                        .getModifiedCount()
-                > 0;
+        Event updated = mongoTemplate.findAndModify(
+                new Query(filter),
+                update,
+                FindAndModifyOptions.options().returnNew(true),
+                Event.class);
+        if (updated == null) {
+            return Optional.empty();
+        }
+        return updated.getEnrolled().stream()
+                .filter(entryAfterWrite -> entryAfterWrite.studentId().equals(studentId))
+                .findFirst()
+                .map(EnrolledEntry::enrollmentVersion);
     }
 
     /**
@@ -356,10 +455,19 @@ public class EventRepository {
                         "enrolled",
                         new Document(
                                 "$concatArrays",
-                                List.of(remainingEnrolled, promotedEntries(studentsToPromote, now))))
+                                List.of(
+                                        remainingEnrolled,
+                                        promotedEntries(
+                                                studentsToPromote,
+                                                now,
+                                                "$lastEnrollmentVersion"))))
                 .append("waitlist", waitlistAfterPromotions(studentsToPromote))
                 .append("promotedCount", promotedCountAfter(studentsToPromote));
-        AggregationUpdate update = AggregationUpdate.from(List.of(Aggregation.stage(new Document("$set", setFields))));
+        AggregationUpdate update = AggregationUpdate.from(List.of(
+                Aggregation.stage(new Document(
+                        "$set",
+                        new Document("lastEnrollmentVersion", nextEnrollmentVersion()))),
+                Aggregation.stage(new Document("$set", setFields))));
 
         return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
     }
@@ -368,7 +476,8 @@ public class EventRepository {
         return new Document("$min", List.of(new Document("$size", "$waitlist"), availablePlaces));
     }
 
-    private static Document promotedEntries(Document studentsToPromote, Instant now) {
+    private static Document promotedEntries(
+            Document studentsToPromote, Instant now, Object enrollmentVersion) {
         return new Document(
                 "$map",
                 new Document("input", new Document("$slice", List.of("$waitlist", studentsToPromote)))
@@ -377,7 +486,16 @@ public class EventRepository {
                                 "in",
                                 new Document("studentId", "$$studentId")
                                         .append("via", EnrollmentVia.PROMOTED.name())
-                                        .append("at", Date.from(now))));
+                                        .append("at", Date.from(now))
+                                        .append("enrollmentVersion", enrollmentVersion)));
+    }
+
+    private static Document nextEnrollmentVersion() {
+        return new Document(
+                "$add",
+                List.of(
+                        new Document("$ifNull", List.of("$lastEnrollmentVersion", 0L)),
+                        1L));
     }
 
     private static Document waitlistAfterPromotions(Document studentsToPromote) {

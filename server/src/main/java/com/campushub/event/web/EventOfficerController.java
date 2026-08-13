@@ -1,11 +1,14 @@
 package com.campushub.event.web;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.FormUpdateOutcome;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventCommandResult;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
 import com.campushub.shared.EventNotEditableException;
+import com.campushub.shared.ConflictException;
+import com.campushub.shared.ErrorCode;
 import com.campushub.shared.NotFoundException;
 import jakarta.validation.Valid;
 import java.time.Clock;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,6 +72,15 @@ class EventOfficerController {
         return currentView(eventId, actor);
     }
 
+    @PutMapping("/api/events/{eventId}/registration-form")
+    EventOfficerResponse updateRegistrationForm(
+            @PathVariable String eventId, @Valid @RequestBody UpdateRegistrationFormRequest request) {
+        CurrentActor actor = identityAccessModule.currentActor();
+        handle(eventModule.updateRegistrationForm(
+                eventId, actor.officerClubIds(), request.toRegistrationForm()));
+        return currentView(eventId, actor);
+    }
+
     @PostMapping("/api/events/{eventId}/publication")
     EventOfficerResponse publish(@PathVariable String eventId) {
         CurrentActor actor = identityAccessModule.currentActor();
@@ -102,6 +115,23 @@ class EventOfficerController {
             case NOT_EDITABLE ->
                 throw new EventNotEditableException(
                         "The Event's current lifecycle state does not allow this change.");
+        }
+    }
+
+    private static void handle(FormUpdateOutcome result) {
+        switch (result) {
+            case SUCCESS -> {
+                // Nothing to do — the caller re-reads the current view.
+            }
+            case NOT_FOUND ->
+                throw new NotFoundException("No such Event, or the caller is not entitled to it.");
+            case NOT_EDITABLE ->
+                throw new EventNotEditableException(
+                        "The Event's current lifecycle state does not allow this change.");
+            case FORM_LOCKED ->
+                throw new ConflictException(
+                        ErrorCode.FORM_LOCKED,
+                        "The registration form is locked because a Student has already registered.");
         }
     }
 }

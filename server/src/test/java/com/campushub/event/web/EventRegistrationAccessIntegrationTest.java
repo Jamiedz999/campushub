@@ -36,6 +36,8 @@ import org.testcontainers.mongodb.MongoDBContainer;
 class EventRegistrationAccessIntegrationTest {
 
     private static final String PASSWORD = "correct-horse-battery-staple";
+    private static final String SHIRT_FIELD_ID = "507f1f77bcf86cd799439011";
+    private static final String TOPICS_FIELD_ID = "507f1f77bcf86cd799439012";
 
     @Container
     static final MongoDBContainer MONGO_DB = new MongoDBContainer("mongo:8");
@@ -60,7 +62,9 @@ class EventRegistrationAccessIntegrationTest {
     private ClubModule clubModule;
 
     private String clubId;
+    private String otherClubId;
     private String officerEmail;
+    private String otherOfficerEmail;
     private String studentAEmail;
     private String studentBEmail;
 
@@ -69,13 +73,18 @@ class EventRegistrationAccessIntegrationTest {
         clubId = clubModule.createClub("Robotics Club");
 
         String suffix = UUID.randomUUID().toString();
+        otherClubId = clubModule.createClub("Chess Club " + suffix);
         officerEmail = "officer-" + suffix + "@event-registration-access-test.campushub";
+        otherOfficerEmail = "other-officer-" + suffix + "@event-registration-access-test.campushub";
         studentAEmail = "student-a-" + suffix + "@event-registration-access-test.campushub";
         studentBEmail = "student-b-" + suffix + "@event-registration-access-test.campushub";
 
         String hash = passwordEncoder.encode(PASSWORD);
         Account officer = accountRepository.insert(new Account(officerEmail, hash, "Officer", SystemRole.STUDENT));
         clubModule.grantOfficer(clubId, officer.getId());
+        Account otherOfficer = accountRepository.insert(
+                new Account(otherOfficerEmail, hash, "Other Officer", SystemRole.STUDENT));
+        clubModule.grantOfficer(otherClubId, otherOfficer.getId());
         accountRepository.insert(new Account(studentAEmail, hash, "Student A", SystemRole.STUDENT));
         accountRepository.insert(new Account(studentBEmail, hash, "Student B", SystemRole.STUDENT));
     }
@@ -181,6 +190,74 @@ class EventRegistrationAccessIntegrationTest {
         assertThat(attempt.statusCode()).isEqualTo(404);
     }
 
+    @Test
+    void anOfficerBuildsAFormAStudentAnswersItAndTheSameColumnsReachCsv() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = extractId(officer.createDraft(clubId, 5).body());
+        String form = "{\"fields\":["
+                + "{\"type\":\"SINGLE_CHOICE\",\"fieldId\":\"" + SHIRT_FIELD_ID
+                + "\",\"label\":\"T-shirt\","
+                + "\"helpText\":null,\"required\":true,\"options\":[\"S\",\"M\",\"L\"]},"
+                + "{\"type\":\"MULTIPLE_CHOICE\",\"fieldId\":\"" + TOPICS_FIELD_ID
+                + "\",\"label\":\"Topics\","
+                + "\"helpText\":\"Choose any\",\"required\":false,"
+                + "\"options\":[\"AI\",\"Robotics\"]}]}";
+
+        HttpResponse<String> built = officer.put("/events/" + eventId + "/registration-form", form);
+        officer.post("/events/" + eventId + "/publication", "");
+        Session student = Session.signIn(port, studentAEmail, PASSWORD);
+        HttpResponse<String> invalid = student.post(
+                "/events/" + eventId + "/registration", "{\"answers\":{}}");
+        HttpResponse<String> afterInvalid = student.get("/events/" + eventId + "/registration");
+        HttpResponse<String> registered = student.post(
+                "/events/" + eventId + "/registration",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"M\",\"" + TOPICS_FIELD_ID
+                        + "\":[\"AI\",\"Robotics\"]}}");
+        HttpResponse<String> answers = officer.get("/events/" + eventId + "/registration-answers");
+        HttpResponse<String> csv = officer.get("/events/" + eventId + "/registration-answers/csv");
+        HttpResponse<String> locked = officer.put(
+                "/events/" + eventId + "/registration-form", "{\"fields\":[]}");
+
+        assertThat(built.statusCode()).isEqualTo(200);
+        assertThat(built.body())
+                .contains("\"fieldId\":\"" + SHIRT_FIELD_ID + "\"")
+                .contains("\"type\":\"SINGLE_CHOICE\"");
+        assertThat(invalid.statusCode()).isEqualTo(400);
+        assertThat(invalid.body())
+                .contains("\"code\":\"FORM_VALIDATION_FAILED\"")
+                .contains("\"" + SHIRT_FIELD_ID + "\":\"Required.\"");
+        assertThat(afterInvalid.body()).contains("\"enrolledCount\":0");
+        assertThat(registered.statusCode()).isEqualTo(200);
+        assertThat(registered.body()).contains("\"enrolled\":true").contains("\"answersSaved\":true");
+        assertThat(answers.body())
+                .contains("\"answersSaved\":true")
+                .contains("\"fieldId\":\"" + SHIRT_FIELD_ID + "\",\"option\":\"M\",\"count\":1");
+        assertThat(csv.statusCode()).isEqualTo(200);
+        assertThat(csv.body())
+                .startsWith("Student,Route in,Answers status,T-shirt,Topics")
+                .contains("M,\"AI; Robotics\"");
+        assertThat(locked.statusCode()).isEqualTo(409);
+        assertThat(locked.body()).contains("\"code\":\"FORM_LOCKED\"");
+    }
+
+    @Test
+    void anOfficerCannotBuildOrReadRegistrationFormsForAnotherClub() throws Exception {
+        Session otherOfficer = Session.signIn(port, otherOfficerEmail, PASSWORD);
+        String otherEventId = extractId(otherOfficer.createDraft(otherClubId, 5).body());
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+
+        HttpResponse<String> formEdit = officer.put(
+                "/events/" + otherEventId + "/registration-form", "{\"fields\":[]}");
+        HttpResponse<String> answers = officer.get(
+                "/events/" + otherEventId + "/registration-answers");
+        HttpResponse<String> csv = officer.get(
+                "/events/" + otherEventId + "/registration-answers/csv");
+
+        assertNotFound(formEdit);
+        assertNotFound(answers);
+        assertNotFound(csv);
+    }
+
     private String publishEvent(Session officer, int capacity) throws Exception {
         HttpResponse<String> created = officer.createDraft(clubId, capacity);
         String eventId = extractId(created.body());
@@ -192,6 +269,11 @@ class EventRegistrationAccessIntegrationTest {
         int start = body.indexOf("\"id\":\"") + 6;
         int end = body.indexOf('"', start);
         return body.substring(start, end);
+    }
+
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
     }
 
     /** A same-origin, cookie-carrying HTTP session signed in as one account — mirrors a real browser tab. */
@@ -239,6 +321,14 @@ class EventRegistrationAccessIntegrationTest {
         HttpResponse<String> post(String path, String jsonBody) throws Exception {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
                     .POST(BodyPublishers.ofString(jsonBody))
+                    .header("Content-Type", "application/json");
+            csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        }
+
+        HttpResponse<String> put(String path, String jsonBody) throws Exception {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
+                    .PUT(BodyPublishers.ofString(jsonBody))
                     .header("Content-Type", "application/json");
             csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
             return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());

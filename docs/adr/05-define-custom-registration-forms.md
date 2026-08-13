@@ -19,6 +19,10 @@ This feature is MongoDB's justification for existing in this project, so it is s
 - **The form definition lives on the Event document.** It is part of what the Event *is*, it is small, and it is read whenever the Event is read — including by the registration write that must validate against it.
 - **The answers live on the Registration document**, in its own collection, keyed by `(eventId, studentId)` with a unique index. Registrations hold answers and nothing else; Seats are the Seat Ledger's business.
 
+**Amendment — Registrations carry an answer fence, not a Seat (implementation Issue #6, 2026-08-14).** "Answers and nothing else" failed when a Student withdrew, registered again, and an old answer request arrived last: the unique `(eventId, studentId)` document had no way to tell which period of being Enrolled those answers belonged to. A Registration now copies the current Seat Ledger entry's `enrollmentVersion` beside its answers. That value grants no Seat and the Seat Ledger remains the sole authority; it only makes the eventual write and every read prove that the answers belong to the exact current enrollment.
+
+Writes are fenced by the monotonic version assigned inside the atomic Seat Ledger write: the same or a newer `enrollmentVersion` may update the unique Registration, while an older one is rejected atomically. Missing/null versions from documents created before this amendment form the legacy incarnation and sort below every assigned version. This preserves old answers while both sides are legacy, lets the next enrollment replace them, and prevents a delayed legacy retry from overwriting current answers. [The Seat Ledger decision](04-define-registration-capacity-and-waitlist.md) records how the version is generated with the Seat and therefore follows successful write order rather than request-start order.
+
 ### Field types
 
 Five, and no more: **short text, long text, single choice, multiple choice, number**.
