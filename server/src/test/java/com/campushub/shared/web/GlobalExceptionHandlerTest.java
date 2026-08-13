@@ -3,6 +3,7 @@ package com.campushub.shared.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.campushub.shared.ErrorCode;
+import com.campushub.shared.EventNotEditableException;
 import com.campushub.shared.NotFoundException;
 import java.util.HashMap;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,20 @@ class GlobalExceptionHandlerTest {
         assertThat(problem.getDetail()).isNotBlank();
         assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/clubs/abc/officers"));
         assertThat(problem.getProperties()).containsEntry("code", ErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void eventNotEditableExceptionBecomesProblemDetailWithEventNotEditableCode() {
+        MockHttpServletRequest request = new MockHttpServletRequest("PATCH", "/api/events/abc");
+
+        ProblemDetail problem =
+                handler.handleEventNotEditable(new EventNotEditableException("cannot lower capacity"), request);
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(problem.getTitle()).isNotBlank();
+        assertThat(problem.getDetail()).isNotBlank();
+        assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/events/abc"));
+        assertThat(problem.getProperties()).containsEntry("code", ErrorCode.EVENT_NOT_EDITABLE);
     }
 
     @Test
