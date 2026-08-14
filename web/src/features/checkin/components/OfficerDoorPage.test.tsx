@@ -106,6 +106,7 @@ describe("OfficerDoorPage", () => {
     const doorCode = await screen.findByRole("region", { name: "Door code" });
     expect(within(doorCode).getByText("2")).toBeInTheDocument();
     expect(within(doorCode).getByText("/ 3")).toBeInTheDocument();
+    expect(within(doorCode).getByText(/rotates at 18:05/i)).toBeInTheDocument();
   });
 
   it("says when the door is shut instead of showing a code that would not admit anyone", async () => {

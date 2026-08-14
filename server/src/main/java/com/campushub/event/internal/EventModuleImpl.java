@@ -374,14 +374,10 @@ class EventModuleImpl implements EventModule {
             String eventId, Set<String> callerOfficerClubIds) {
         return repository.findScopedById(eventId, callerOfficerClubIds).map(event -> {
             List<AttendanceRosterEntry> items = event.getEnrolled().stream()
-                    .map(seat -> new AttendanceRosterEntry(
-                            seat.studentId(),
-                            attendanceOf(event, seat.studentId())
-                                    .map(AttendanceEntry::at)
-                                    .orElse(null),
-                            attendanceOf(event, seat.studentId())
-                                    .map(AttendanceEntry::method)
-                                    .orElse(null)))
+                    .map(seat -> attendanceOf(event, seat.studentId())
+                            .map(entry -> new AttendanceRosterEntry(
+                                    seat.studentId(), entry.at(), entry.method()))
+                            .orElseGet(() -> new AttendanceRosterEntry(seat.studentId(), null, null)))
                     .toList();
             return new AttendanceRoster(
                     event.getId(),

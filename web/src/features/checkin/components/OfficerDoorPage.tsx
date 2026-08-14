@@ -60,7 +60,10 @@ export function OfficerDoorPage() {
             <span className="text-2xl font-normal text-slate-500"> / {code.enrolledCount}</span>
           </p>
           <p className="text-sm text-slate-500">checked in</p>
-          <p className="text-sm text-slate-500">The code changes every minute. Students scan it themselves.</p>
+          <p className="text-sm text-slate-500">
+            Students scan the code themselves. It rotates at {formatCampusTime(code.rotatesAt)} and the
+            screen refreshes on its own — a code that has just rotated still works for a minute.
+          </p>
         </div>
       </section>
 

@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
 @Component
 class CheckInTokenCodec {
 
-    static final Duration WINDOW = Duration.ofSeconds(60);
+    private static final Duration WINDOW = Duration.ofSeconds(60);
 
     private static final String ALGORITHM = "HmacSHA256";
     private static final String SEPARATOR = ".";

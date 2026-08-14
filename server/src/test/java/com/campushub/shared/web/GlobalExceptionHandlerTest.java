@@ -63,6 +63,25 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void aConflictCarriesTheExtraMembersItsRefusalNeedsAlongsideTheCode() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/events/abc/attendance");
+
+        ProblemDetail problem = handler.handleConflict(
+                new ConflictException(
+                        ErrorCode.ALREADY_CHECKED_IN,
+                        "You are already checked in to this Event.",
+                        Map.of("at", "2026-03-20T18:04:00Z", "method", "SCANNED")),
+                request);
+
+        // `code` stays the contract; these are the facts a refusal carries that the client cannot read
+        // out of `detail` — a second scan being told when the first one was.
+        assertThat(problem.getProperties())
+                .containsEntry("code", ErrorCode.ALREADY_CHECKED_IN)
+                .containsEntry("at", "2026-03-20T18:04:00Z")
+                .containsEntry("method", "SCANNED");
+    }
+
+    @Test
     void unexpectedExceptionBecomesProblemDetailWithInternalErrorCode() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/system");
 
