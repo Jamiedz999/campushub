@@ -86,7 +86,7 @@ describe("EventsBrowsePage", () => {
     expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
   });
 
-  it("links an Officer to capacity management only for their own Clubs Event", async () => {
+  it("links an Officer to Venue and capacity management only for their own Clubs Event", async () => {
     vi.spyOn(httpClient, "get").mockResolvedValue(
       axiosResponse({
         items: [item({}), item({ id: "event-2", clubId: "club-2", title: "Chess Night" })],
@@ -101,6 +101,9 @@ describe("EventsBrowsePage", () => {
     const link = await screen.findByRole("link", { name: "Manage capacity" });
     expect(link).toHaveAttribute("href", "/officer/events/event-1/capacity");
     expect(screen.getAllByRole("link", { name: "Manage capacity" })).toHaveLength(1);
+    const venueLink = screen.getByRole("link", { name: "Book a venue" });
+    expect(venueLink).toHaveAttribute("href", "/officer/events/event-1/venue");
+    expect(screen.getAllByRole("link", { name: "Book a venue" })).toHaveLength(1);
   });
 
   it("renders an empty state when no events match", async () => {

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -13,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.campushub.event.EventModule.WithdrawalOutcome;
 import com.campushub.event.EventModule.SeatRequestOutcome;
 import com.campushub.event.EventModule.SeatRequestResult;
+import com.campushub.event.EventModule.SlotCommandOutcome;
 import com.campushub.event.EventModule.FormUpdateOutcome;
 import com.campushub.event.EventModule.NumberField;
 import com.campushub.event.EventModule.RegistrationForm;
@@ -28,6 +31,9 @@ import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.FormValidationException;
+import com.campushub.venue.VenueModule;
+import com.campushub.venue.VenueModule.SlotRequestOutcome;
+import com.campushub.venue.VenueModule.SlotRequestResult;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -35,10 +41,15 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,11 +61,14 @@ class EventModuleImplTest {
     @Mock
     private EventRepository repository;
 
+    @Mock
+    private VenueModule venueModule;
+
     private EventModuleImpl module;
 
     @BeforeEach
     void setUp() {
-        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), venueModule);
     }
 
     @Test
@@ -192,6 +206,10 @@ class EventModuleImplTest {
         when(repository.cancelAsOfficer("event-1", CLUB_IDS, NOW)).thenReturn(true);
 
         assertThat(module.cancelAsOfficer("event-1", CLUB_IDS)).isEqualTo(EventCommandResult.SUCCESS);
+
+        InOrder order = inOrder(repository, venueModule);
+        order.verify(repository).cancelAsOfficer("event-1", CLUB_IDS, NOW);
+        order.verify(venueModule).releaseEventSlots("event-1");
     }
 
     @Test
@@ -216,6 +234,204 @@ class EventModuleImplTest {
         when(repository.exists("event-1")).thenReturn(true);
 
         assertThat(module.cancelAsAdmin("event-1")).isEqualTo(EventCommandResult.NOT_EDITABLE);
+    }
+
+    @Test
+    void aFailedOldSlotReleaseHappensOnlyAfterTheNewSlotAndEventMoveHaveSucceeded() {
+        Instant oldStart = NOW.plusSeconds(3_600);
+        Instant oldEnd = NOW.plusSeconds(7_200);
+        Instant newStart = NOW.plusSeconds(10_800);
+        Instant newEnd = NOW.plusSeconds(14_400);
+        Event event = mock(Event.class);
+        when(event.getStatus()).thenReturn(EventStatus.PUBLISHED);
+        when(event.getVenueId()).thenReturn("old-venue");
+        when(event.getStartsAt()).thenReturn(oldStart);
+        when(event.getEndsAt()).thenReturn(oldEnd);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+        when(venueModule.requestSlot("new-venue", "event-1", newStart, newEnd))
+                .thenReturn(new SlotRequestResult(SlotRequestOutcome.ACQUIRED, List.of()));
+        when(repository.moveToSlot(
+                        "event-1",
+                        CLUB_IDS,
+                        "old-venue",
+                        oldStart,
+                        oldEnd,
+                        "new-venue",
+                        newStart,
+                        newEnd,
+                        NOW))
+                .thenReturn(true);
+        doThrow(new IllegalStateException("injected release failure"))
+                .when(venueModule)
+                .releaseSlot("old-venue", "event-1", oldStart, oldEnd);
+
+        assertThatThrownBy(() -> module.bookSlotAsOfficer(
+                        "event-1", CLUB_IDS, "new-venue", newStart, newEnd))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("injected release failure");
+
+        InOrder order = inOrder(venueModule, repository);
+        order.verify(venueModule).requestSlot("new-venue", "event-1", newStart, newEnd);
+        order.verify(repository)
+                .moveToSlot(
+                        "event-1",
+                        CLUB_IDS,
+                        "old-venue",
+                        oldStart,
+                        oldEnd,
+                        "new-venue",
+                        newStart,
+                        newEnd,
+                        NOW);
+        order.verify(venueModule).releaseSlot("old-venue", "event-1", oldStart, oldEnd);
+    }
+
+    @Test
+    void bookingRefusesMissingCancelledAndStartedEventsBeforeAcquiringAnything() {
+        Event cancelled = mock(Event.class);
+        when(cancelled.getStatus()).thenReturn(EventStatus.CANCELLED);
+        Event started = mock(Event.class);
+        when(started.getStatus()).thenReturn(EventStatus.PUBLISHED);
+        when(started.getStartsAt()).thenReturn(NOW);
+        when(repository.findScopedById("missing", CLUB_IDS)).thenReturn(Optional.empty());
+        when(repository.findScopedById("cancelled", CLUB_IDS)).thenReturn(Optional.of(cancelled));
+        when(repository.findScopedById("started", CLUB_IDS)).thenReturn(Optional.of(started));
+
+        assertThat(module.bookSlotAsOfficer("missing", CLUB_IDS, "venue-1", NOW, NOW.plusSeconds(1)))
+                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
+        assertThat(module.bookSlotAsOfficer("cancelled", CLUB_IDS, "venue-1", NOW, NOW.plusSeconds(1)))
+                .isEqualTo(SlotCommandOutcome.NOT_EDITABLE);
+        assertThat(module.bookSlotAsOfficer("started", CLUB_IDS, "venue-1", NOW, NOW.plusSeconds(1)))
+                .isEqualTo(SlotCommandOutcome.SLOT_ALREADY_STARTED);
+        verify(venueModule, never()).requestSlot(any(), any(), any(), any());
+    }
+
+    @Test
+    void repeatingTheEventsCurrentSlotIsIdempotentlySuccessful() {
+        Instant startsAt = NOW.plusSeconds(3_600);
+        Instant endsAt = NOW.plusSeconds(7_200);
+        Event event = bookableEvent("venue-1", startsAt);
+        when(event.getEndsAt()).thenReturn(endsAt);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+
+        assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", startsAt, endsAt))
+                .isEqualTo(SlotCommandOutcome.SUCCESS);
+        verify(venueModule, never()).requestSlot(any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @MethodSource("venueRequestRefusals")
+    void bookingKeepsEveryVenueRequestRefusalStable(
+            SlotRequestOutcome venueOutcome,
+            SlotCommandOutcome eventOutcome) {
+        Instant startsAt = NOW.plusSeconds(3_600);
+        Instant endsAt = NOW.plusSeconds(7_200);
+        Event event = bookableEvent(null, startsAt);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+        when(venueModule.requestSlot("venue-1", "event-1", startsAt, endsAt))
+                .thenReturn(new SlotRequestResult(venueOutcome, List.of()));
+
+        assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", startsAt, endsAt))
+                .isEqualTo(eventOutcome);
+        verify(repository, never()).moveToSlot(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @MethodSource("failedMoveClassifications")
+    void aLostEventCompareAndSetReleasesTheNewSlot(
+            boolean stillExists,
+            SlotCommandOutcome expected) {
+        Instant oldStart = NOW.plusSeconds(3_600);
+        Instant oldEnd = NOW.plusSeconds(7_200);
+        Instant newStart = NOW.plusSeconds(10_800);
+        Instant newEnd = NOW.plusSeconds(14_400);
+        Event event = bookableEvent(null, oldStart);
+        when(event.getEndsAt()).thenReturn(oldEnd);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+        when(venueModule.requestSlot("venue-1", "event-1", newStart, newEnd))
+                .thenReturn(new SlotRequestResult(SlotRequestOutcome.ACQUIRED, List.of()));
+        when(repository.moveToSlot(
+                        "event-1",
+                        CLUB_IDS,
+                        null,
+                        oldStart,
+                        oldEnd,
+                        "venue-1",
+                        newStart,
+                        newEnd,
+                        NOW))
+                .thenReturn(false);
+        when(repository.existsScoped("event-1", CLUB_IDS)).thenReturn(stillExists);
+
+        assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", newStart, newEnd))
+                .isEqualTo(expected);
+        verify(venueModule).releaseSlot("venue-1", "event-1", newStart, newEnd);
+    }
+
+    @Test
+    void adminBookingAndReleaseClassifyMissingEventsWithoutAClubScopedRead() {
+        when(repository.findById("missing")).thenReturn(Optional.empty());
+
+        assertThat(module.bookSlotAsAdmin("missing", "venue-1", NOW, NOW.plusSeconds(1)))
+                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
+        assertThat(module.releaseSlotAsAdmin("missing"))
+                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
+        verify(repository, never()).findScopedById(eq("missing"), any());
+    }
+
+    @Test
+    void releasingIsIdempotentWhenTheUpcomingEventHasNoVenue() {
+        Event event = mock(Event.class);
+        when(event.getStartsAt()).thenReturn(NOW.plusSeconds(3_600));
+        when(event.getVenueId()).thenReturn(null);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+
+        assertThat(module.releaseSlotAsOfficer("event-1", CLUB_IDS))
+                .isEqualTo(SlotCommandOutcome.SUCCESS);
+        verify(repository, never()).clearVenue(any(), any(), any(), any(), any());
+        verify(venueModule).releaseEventSlots("event-1");
+    }
+
+    @Test
+    void releaseRefusesMissingAndAlreadyStartedEvents() {
+        Event started = mock(Event.class);
+        when(started.getStartsAt()).thenReturn(NOW);
+        when(repository.findScopedById("missing", CLUB_IDS)).thenReturn(Optional.empty());
+        when(repository.findScopedById("started", CLUB_IDS)).thenReturn(Optional.of(started));
+
+        assertThat(module.releaseSlotAsOfficer("missing", CLUB_IDS))
+                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
+        assertThat(module.releaseSlotAsOfficer("started", CLUB_IDS))
+                .isEqualTo(SlotCommandOutcome.SLOT_ALREADY_STARTED);
+        verify(venueModule, never()).releaseEventSlots(any());
+    }
+
+    @ParameterizedTest
+    @MethodSource("failedMoveClassifications")
+    void aLostReleaseCompareAndSetKeepsTheSlot(
+            boolean stillExists,
+            SlotCommandOutcome expected) {
+        Instant startsAt = NOW.plusSeconds(3_600);
+        Event event = mock(Event.class);
+        when(event.getStartsAt()).thenReturn(startsAt);
+        when(event.getVenueId()).thenReturn("venue-1");
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+        when(repository.clearVenue("event-1", CLUB_IDS, "venue-1", startsAt, NOW))
+                .thenReturn(false);
+        when(repository.existsScoped("event-1", CLUB_IDS)).thenReturn(stillExists);
+
+        assertThat(module.releaseSlotAsOfficer("event-1", CLUB_IDS)).isEqualTo(expected);
+        verify(venueModule, never()).releaseEventSlots(any());
+    }
+
+    @Test
+    void anUnknownVenueDayIsEmptyWithoutAnEventLookup() {
+        when(venueModule.findDay("missing", java.time.LocalDate.parse("2026-03-20")))
+                .thenReturn(Optional.empty());
+
+        assertThat(module.findVenueDay("missing", java.time.LocalDate.parse("2026-03-20")))
+                .isEmpty();
+        verify(repository, never()).cancelledEventIds(any());
     }
 
     @Test
@@ -460,6 +676,35 @@ class EventModuleImplTest {
         when(repository.findEnrolled("student-1", 0, 20)).thenReturn(page);
 
         assertThat(module.findEnrolled("student-1", -1, 20)).isEqualTo(page);
+    }
+
+    private static Stream<Arguments> venueRequestRefusals() {
+        return Stream.of(
+                Arguments.of(SlotRequestOutcome.NOT_FOUND, SlotCommandOutcome.NOT_FOUND),
+                Arguments.of(SlotRequestOutcome.SLOT_TAKEN, SlotCommandOutcome.SLOT_TAKEN),
+                Arguments.of(
+                        SlotRequestOutcome.SLOT_CROSSES_MIDNIGHT,
+                        SlotCommandOutcome.SLOT_CROSSES_MIDNIGHT),
+                Arguments.of(
+                        SlotRequestOutcome.SLOT_IN_DST_TRANSITION,
+                        SlotCommandOutcome.SLOT_IN_DST_TRANSITION),
+                Arguments.of(
+                        SlotRequestOutcome.SLOT_ALREADY_STARTED,
+                        SlotCommandOutcome.SLOT_ALREADY_STARTED));
+    }
+
+    private static Stream<Arguments> failedMoveClassifications() {
+        return Stream.of(
+                Arguments.of(true, SlotCommandOutcome.NOT_EDITABLE),
+                Arguments.of(false, SlotCommandOutcome.NOT_FOUND));
+    }
+
+    private static Event bookableEvent(String venueId, Instant startsAt) {
+        Event event = mock(Event.class);
+        when(event.getStatus()).thenReturn(EventStatus.PUBLISHED);
+        when(event.getVenueId()).thenReturn(venueId);
+        when(event.getStartsAt()).thenReturn(startsAt);
+        return event;
     }
 
     private static Event someEvent() {

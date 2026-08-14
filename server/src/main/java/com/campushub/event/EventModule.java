@@ -8,8 +8,10 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
+import com.campushub.venue.VenueModule.VenueDayView;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -107,6 +109,17 @@ public interface EventModule {
         NOT_FOUND,
         NOT_EDITABLE,
         FORM_LOCKED
+    }
+
+    /** Stable outcomes of acquiring or moving an Event's Venue Slot. */
+    enum SlotCommandOutcome {
+        SUCCESS,
+        NOT_FOUND,
+        NOT_EDITABLE,
+        SLOT_TAKEN,
+        SLOT_CROSSES_MIDNIGHT,
+        SLOT_IN_DST_TRANSITION,
+        SLOT_ALREADY_STARTED
     }
 
     /** Stable result returned to the Registration module's orchestration path. */
@@ -208,6 +221,27 @@ public interface EventModule {
      * docs/adr/08-define-roles-and-resource-authorization.md.
      */
     EventCommandResult cancelAsAdmin(String eventId);
+
+    /** Acquires the new Slot before changing the Event or releasing its old Slot. */
+    SlotCommandOutcome bookSlotAsOfficer(
+            String eventId,
+            Set<String> callerOfficerClubIds,
+            String venueId,
+            Instant startsAt,
+            Instant endsAt);
+
+    /** University Admin path, unscoped by Club. */
+    SlotCommandOutcome bookSlotAsAdmin(
+            String eventId, String venueId, Instant startsAt, Instant endsAt);
+
+    /** Idempotently releases all Slots for an Officer-scoped Event, until it starts. */
+    SlotCommandOutcome releaseSlotAsOfficer(String eventId, Set<String> callerOfficerClubIds);
+
+    /** University Admin release path, unscoped by Club. */
+    SlotCommandOutcome releaseSlotAsAdmin(String eventId);
+
+    /** Venue-day timeline after cancelled Event orphan bookings have been removed. */
+    Optional<VenueDayView> findVenueDay(String venueId, LocalDate date);
 
     /** Published Events only, matching docs/adr/16-define-event-discovery.md's search/filter/sort/paging. */
     EventPage browse(EventBrowseQuery query);

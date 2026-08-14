@@ -150,6 +150,20 @@ public class EventRepository {
         return Optional.ofNullable(mongoTemplate.findById(eventId, Event.class));
     }
 
+    /** Cancelled Events among the supplied ids, used to repair orphan Venue bookings. */
+    public Set<String> cancelledEventIds(List<String> eventIds) {
+        if (eventIds.isEmpty()) {
+            return Set.of();
+        }
+        Query query = new Query(Criteria.where("id")
+                .in(eventIds)
+                .and("status")
+                .is(EventStatus.CANCELLED));
+        return mongoTemplate.find(query, Event.class).stream()
+                .map(Event::getId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     /**
      * One atomic update. Draft: every field is editable. Published, before startsAt: title,
      * description, the four timestamps and capacity, and capacity may only be raised — both guards live
@@ -167,6 +181,11 @@ public class EventRepository {
 
         List<Criteria> guards = new ArrayList<>();
         guards.add(editableWindow);
+        if (edit.startsAt() != null || edit.endsAt() != null) {
+            // Once a Venue is held, timestamps move only through the Slot command, which acquires the
+            // new Slot first. A generic PATCH must not create an Event that moved without a room.
+            guards.add(Criteria.where("venueId").is(null));
+        }
         if (edit.capacity() != null) {
             guards.add(new Criteria()
                     .orOperator(
@@ -212,6 +231,60 @@ public class EventRepository {
         }
         return mongoTemplate
                         .updateFirst(new Query(filter), update, Event.class)
+                        .getModifiedCount()
+                > 0;
+    }
+
+    /**
+     * Moves the Event only if the scoped snapshot used before acquiring the new Slot is still current.
+     * The compare-and-set prevents two concurrent reschedules from both becoming canonical.
+     */
+    public boolean moveToSlot(
+            String eventId,
+            Set<String> clubIds,
+            String expectedVenueId,
+            Instant expectedStartsAt,
+            Instant expectedEndsAt,
+            String newVenueId,
+            Instant newStartsAt,
+            Instant newEndsAt,
+            Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("clubId")
+                .in(clubIds)
+                .and("status")
+                .ne(EventStatus.CANCELLED)
+                .and("venueId")
+                .is(expectedVenueId)
+                .and("startsAt")
+                .is(expectedStartsAt)
+                .gt(now)
+                .and("endsAt")
+                .is(expectedEndsAt);
+        Update update = new Update()
+                .set("venueId", newVenueId)
+                .set("startsAt", newStartsAt)
+                .set("endsAt", newEndsAt);
+        return mongoTemplate.updateFirst(new Query(filter), update, Event.class).getModifiedCount() > 0;
+    }
+
+    public boolean clearVenue(
+            String eventId,
+            Set<String> clubIds,
+            String expectedVenueId,
+            Instant expectedStartsAt,
+            Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("clubId")
+                .in(clubIds)
+                .and("venueId")
+                .is(expectedVenueId)
+                .and("startsAt")
+                .is(expectedStartsAt)
+                .gt(now);
+        return mongoTemplate.updateFirst(new Query(filter), new Update().unset("venueId"), Event.class)
                         .getModifiedCount()
                 > 0;
     }

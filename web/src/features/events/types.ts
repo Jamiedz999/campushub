@@ -36,6 +36,7 @@ export interface EventBrowseFilters {
 
 export interface EventOfficerView extends EventBrowseItem {
   status: EventStatus;
+  venueId: string | null;
   promotedCount: number;
   everQueuedCount: number;
   waitlistConversion: number;
