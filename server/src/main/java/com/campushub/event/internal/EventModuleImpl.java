@@ -20,6 +20,7 @@ import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.Phase;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
+import com.campushub.realtime.RealtimeModule;
 import com.campushub.venue.VenueModule;
 import com.campushub.venue.VenueModule.Slot;
 import com.campushub.venue.VenueModule.SlotRequestOutcome;
@@ -41,11 +42,14 @@ class EventModuleImpl implements EventModule {
     private final EventRepository repository;
     private final Clock clock;
     private final VenueModule venueModule;
+    private final RealtimeModule realtimeModule;
 
-    EventModuleImpl(EventRepository repository, Clock clock, VenueModule venueModule) {
+    EventModuleImpl(
+            EventRepository repository, Clock clock, VenueModule venueModule, RealtimeModule realtimeModule) {
         this.repository = repository;
         this.clock = clock;
         this.venueModule = venueModule;
+        this.realtimeModule = realtimeModule;
     }
 
     @Override
@@ -382,6 +386,7 @@ class EventModuleImpl implements EventModule {
     public AttendanceResult recordScannedAttendance(String eventId, String studentId) {
         Instant now = clock.instant();
         Optional<Event> written = repository.recordScannedAttendance(eventId, studentId, now);
+        written.ifPresent(this::hintDoorScreens);
         return written.map(event -> succeeded(event, studentId))
                 .orElseGet(() -> classifyAttendanceFailure(
                         repository.findById(eventId).filter(event -> event.getStatus() != EventStatus.DRAFT),
@@ -395,9 +400,23 @@ class EventModuleImpl implements EventModule {
         Instant now = clock.instant();
         Optional<Event> written =
                 repository.recordManualAttendance(eventId, callerOfficerClubIds, studentId, now);
+        written.ifPresent(this::hintDoorScreens);
         return written.map(event -> succeeded(event, studentId))
                 .orElseGet(() -> classifyAttendanceFailure(
                         repository.findScopedById(eventId, callerOfficerClubIds), studentId, now));
+    }
+
+    /**
+     * Both attendance writes end here, and only when the guarded write actually changed something —
+     * {@code written} is empty for a Student who was already checked in, and a hint for a door where
+     * nothing moved would make every screen re-read for nothing.
+     *
+     * <p>It lives in the module rather than in the two controllers above it because this is the one
+     * place that knows a Seat Ledger write succeeded. A hint published beside each caller would be a
+     * rule maintained by whoever adds the third caller.
+     */
+    private void hintDoorScreens(Event event) {
+        realtimeModule.publishAttendanceChanged(event.getId());
     }
 
     private static AttendanceResult succeeded(Event event, String studentId) {

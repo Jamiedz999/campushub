@@ -29,6 +29,7 @@ import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
+import com.campushub.realtime.RealtimeModule;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.FormValidationException;
 import com.campushub.venue.VenueModule;
@@ -65,11 +66,14 @@ class EventModuleImplTest {
     @Mock
     private VenueModule venueModule;
 
+    @Mock
+    private RealtimeModule realtimeModule;
+
     private EventModuleImpl module;
 
     @BeforeEach
     void setUp() {
-        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), venueModule);
+        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), venueModule, realtimeModule);
     }
 
     @Test

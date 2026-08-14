@@ -62,6 +62,13 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- Raw WebSocketHandler only. STOMP, SockJS and a message broker are all deliberately unused:
+         the socket carries a refresh hint in one direction and nothing else. See
+         docs/planning/implementation/TECHNICAL-BASELINE.md. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
 
     <!-- Authentication and sessions -->
     <dependency>

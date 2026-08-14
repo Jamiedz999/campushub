@@ -10,6 +10,12 @@ export default defineConfig({
         target: "http://localhost:8080",
         changeOrigin: true,
       },
+      // The door screen's socket. Same origin in production, so it needs proxying only here, where the
+      // dev server and the backend are two ports.
+      "/ws": {
+        target: "ws://localhost:8080",
+        ws: true,
+      },
     },
   },
   test: {

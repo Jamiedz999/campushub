@@ -48,6 +48,12 @@ class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/**")
                         .authenticated()
+                        // The WebSocket handshake is an ordinary GET, so it is the last chance to
+                        // require a session before a connection outlives the request that opened it.
+                        // Which scope that session may then watch is decided in realtime's handshake
+                        // interceptor, which can answer 404 the way the rest of the system does.
+                        .requestMatchers("/ws/**")
+                        .authenticated()
                         .anyRequest()
                         .permitAll())
                 .formLogin(form -> form.loginProcessingUrl("/api/auth/login")

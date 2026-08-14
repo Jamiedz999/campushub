@@ -2,6 +2,10 @@ package com.campushub.event.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
@@ -17,6 +21,7 @@ import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.persistence.EventRepository;
+import com.campushub.realtime.RealtimeModule;
 import com.campushub.venue.VenueModule;
 import java.time.Clock;
 import java.time.Instant;
@@ -48,11 +53,14 @@ class EventModuleImplAttendanceTest {
     @Mock
     private VenueModule venueModule;
 
+    @Mock
+    private RealtimeModule realtimeModule;
+
     private EventModuleImpl module;
 
     @BeforeEach
     void setUp() {
-        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), venueModule);
+        module = new EventModuleImpl(repository, Clock.fixed(NOW, ZoneOffset.UTC), venueModule, realtimeModule);
     }
 
     @Test
@@ -142,6 +150,37 @@ class EventModuleImplAttendanceTest {
 
         assertThat(module.recordManualAttendance("event-1", "student-1", CLUB_IDS))
                 .isEqualTo(new AttendanceResult(AttendanceOutcome.SUCCESS, "Title", NOW, AttendanceMethod.MANUAL));
+    }
+
+    @Test
+    void bothWritesHintTheDoorScreensWithTheEventIdAndNothingElse() {
+        Event scanned = event(List.of(seat("student-1")), List.of(scannedAt(NOW, "student-1")));
+        when(repository.recordScannedAttendance("event-1", "student-1", NOW)).thenReturn(Optional.of(scanned));
+        Event overridden = event(
+                List.of(seat("student-2")),
+                List.of(new AttendanceEntry("student-2", NOW, AttendanceMethod.MANUAL)));
+        when(repository.recordManualAttendance("event-1", CLUB_IDS, "student-2", NOW))
+                .thenReturn(Optional.of(overridden));
+
+        module.recordScannedAttendance("event-1", "student-1");
+        module.recordManualAttendance("event-1", "student-2", CLUB_IDS);
+
+        // Twice, and with nothing a screen could mistake for the answer: the scope changed, so re-read.
+        verify(realtimeModule, times(2)).publishAttendanceChanged("event-1");
+        verifyNoMoreInteractions(realtimeModule);
+    }
+
+    @Test
+    void aWriteThatChangedNothingHintsNobody() {
+        Event event = event(List.of(seat("student-1")), List.of(scannedAt(NOW.minusSeconds(300), "student-1")));
+        when(repository.recordScannedAttendance("event-1", "student-1", NOW)).thenReturn(Optional.empty());
+        when(repository.findById("event-1")).thenReturn(Optional.of(event));
+
+        // A Student scanning twice is the ordinary case at a busy door, and the second scan writes
+        // nothing. Hinting on it would wake every screen in the room to re-read an unchanged Roster.
+        assertThat(module.recordScannedAttendance("event-1", "student-1").outcome())
+                .isEqualTo(AttendanceOutcome.ALREADY_CHECKED_IN);
+        verifyNoInteractions(realtimeModule);
     }
 
     @Test

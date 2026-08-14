@@ -11,6 +11,7 @@ import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.persistence.EventRepository;
+import com.campushub.realtime.RealtimeModule;
 import com.campushub.venue.VenueModule;
 import com.campushub.venue.VenueModule.Slot;
 import java.time.Clock;
@@ -57,6 +58,9 @@ class EventVenueIntegrationTest {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private RealtimeModule realtimeModule;
 
     @Test
     void aFailedAcquireLeavesTheEventsOriginalVenueAndTimestampsUntouched() {
@@ -109,7 +113,7 @@ class EventVenueIntegrationTest {
                 .when(faultingVenueModule)
                 .releaseReservation(eventId, new Slot(oldVenueId, OLD_START, OLD_END));
         EventModule faultingEventModule =
-                new EventModuleImpl(eventRepository, clock, faultingVenueModule);
+                new EventModuleImpl(eventRepository, clock, faultingVenueModule, realtimeModule);
 
         assertThatThrownBy(() -> faultingEventModule.bookSlotAsOfficer(
                         eventId, Set.of(clubId), newVenueId, newStart, newEnd))
