@@ -38,6 +38,8 @@ Attendance rate is deliberately measured against **enrolled**, because it answer
 
 The exclusions are shown in the UI as a count — "3 Cancelled Events not shown" — rather than left to be inferred from a total that does not add up. A number that quietly omits rows is a number nobody can check.
 
+**Which excluded Events fall inside a time range, settled during implementation (Issue #10).** The population is bounded by `endsAt`, and a running Event has not got one yet, so the same clause would count nothing. The exclusion count therefore reads: Draft and Cancelled Events **whose `endsAt` falls in the range**, and Published Events that **started inside the range and have not yet finished**. Both are scoped by Club exactly as the metrics are — another Club's running Event is not an Officer's missing row.
+
 **Manual override share** exists because the check-in decision made scanned and manual records distinguishable. A club whose attendance is 80% manual has not demonstrated attendance, and the dashboard should say so.
 
 ### Two fields this decision adds to the Seat Ledger
@@ -57,6 +59,10 @@ Every number is computed on read by a **MongoDB aggregation pipeline**. There is
 This is correct at this scale — hundreds of Events, tens of thousands of attendance entries — where an indexed aggregation answers in milliseconds. Pre-aggregating now would be building a cache for a problem that does not exist, and the map's guardrails forbid exactly that.
 
 **What would force the change**, recorded so the position is falsifiable rather than merely asserted: a dashboard query exceeding roughly one second, or Event counts in the tens of thousands. That threshold is also the honest opening for a future measured performance experiment — profile first, then decide between indexes, pre-aggregation and caching. That experiment is Future Work and is explicitly not a reason to add Redis to Core.
+
+**Measured, so the threshold has a number under it (implementation Issue #10, 2026-08-14).** One dashboard read is five aggregation pipelines — totals, months, Clubs, Events, and the excluded count — and one page load pays for all five. Against 500 Events carrying 30,000 attendance entries, on a `mongo:8` Testcontainer with the compound `(status, endsAt, clubId)` index the population match uses, **the whole read has a median of 61 ms**, five runs after a warm-up. That is roughly sixteen times inside the one-second threshold, which is why "computed on read" is the position and not an aspiration.
+
+`DashboardPerformanceIntegrationTest` in `server/` is that measurement, and it asserts the threshold rather than the figure. Sixty-one milliseconds is a property of one laptop and would be a flaky assertion; one second is the number this decision actually rests on, and only a change of an order of magnitude in the data or the query can break it — which is exactly the event this paragraph wants to hear about.
 
 ### The two views
 

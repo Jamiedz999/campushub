@@ -1,12 +1,14 @@
 package com.campushub.club.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campushub.club.persistence.ClubOfficerGrantRepository;
 import com.campushub.club.persistence.ClubRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,13 @@ class ClubModuleImplTest {
     @BeforeEach
     void setUp() {
         module = new ClubModuleImpl(clubRepository, grantRepository);
+    }
+
+    @Test
+    void clubNamesDelegatesToTheRepository() {
+        when(clubRepository.namesOf(Set.of("club-1"))).thenReturn(Map.of("club-1", "Chess Club"));
+
+        assertThat(module.clubNames(Set.of("club-1"))).containsExactly(entry("club-1", "Chess Club"));
     }
 
     @Test

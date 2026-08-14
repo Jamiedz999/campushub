@@ -57,9 +57,16 @@ export function EventsBrowsePage() {
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Events</h1>
-        <Link to="/events/mine" className="text-sm text-slate-600 hover:underline">
-          My events
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link to="/events/mine" className="text-sm text-slate-600 hover:underline">
+            My events
+          </Link>
+          {/* Shown to everyone; the endpoint behind it 404s for an account that officers no Club, and
+              the page says so rather than the link pretending the account has one. */}
+          <Link to="/dashboard" className="text-sm text-slate-600 hover:underline">
+            Dashboard
+          </Link>
+        </div>
       </div>
 
       <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">

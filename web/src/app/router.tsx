@@ -29,6 +29,18 @@ export const router = createBrowserRouter([
         element: <EventsBrowsePage />,
       },
       {
+        // One route for both of the dashboard's views: which one the caller gets is decided by their
+        // grants on the server, not by the URL they typed. See docs/adr/09-define-attendance-dashboard.md.
+        //
+        // Loaded on demand, unlike every other route: ECharts is by far the largest dependency in the
+        // app, and the Students who never open a dashboard should not download a charting library to
+        // register for a talk.
+        path: "/dashboard",
+        lazy: async () => ({
+          Component: (await import("../features/dashboard/components/DashboardPage")).DashboardPage,
+        }),
+      },
+      {
         path: "/events/mine",
         element: <MyEventsPage />,
       },

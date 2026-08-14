@@ -4,6 +4,7 @@ import com.campushub.club.ClubModule;
 import com.campushub.club.persistence.ClubOfficerGrantRepository;
 import com.campushub.club.persistence.ClubRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,11 @@ class ClubModuleImpl implements ClubModule {
     @Override
     public void revokeOfficer(String clubId, String accountId) {
         grantRepository.revoke(clubId, accountId);
+    }
+
+    @Override
+    public Map<String, String> clubNames(Set<String> clubIds) {
+        return clubRepository.namesOf(clubIds);
     }
 
     @Override
