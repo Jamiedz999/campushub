@@ -28,13 +28,17 @@ Modelling the officer role as a per-Club grant rather than a global flag is what
 | See attendee names or form answers | ❌ | own Club only | ❌ |
 | Create, edit, publish, cancel an Event | ❌ | own Club only | cancel only |
 | Build the registration form, export answers | ❌ | own Club only | ❌ |
-| Book or release a Venue Slot | ❌ | own Club only | ✅ |
+| Book or release a Venue Slot | ❌ | own Club only | ❌ |
 | Run the door screen, override attendance | ❌ | own Club only | ❌ |
 | Create and manage Venues | ❌ | ❌ | ✅ |
 | Grant Club Officer rights | ❌ | ❌ | ✅ |
 | Read the cross-club dashboard | ❌ | own Club only | ✅ |
 
 A University Admin can cancel any Event, because they own the Venues and must be able to clear a room. They cannot author or run one; that is the Club's business.
+
+**Amendment — a University Admin may not book or release an Event's Slot, 2026-08-14 (during [#17](https://github.com/Jamiedz999/campushub/issues/17)).** The Venue Slot row read `✅` for University Admin and contradicted [ADR 06](06-define-venue-slot-booking.md), which says Admins create and manage Venues while Club Officers book them. A Slot is held by an Event, so the Event's Club is what decides, and the campus-wide role is not a way around that; managing the room and booking it are different powers, and the `✅` collapsed them. The implementation followed ADR 06 throughout and is unchanged — the row is corrected to `❌`. Cancellation stays the one Admin power over somebody else's Event, and it releases the Slot as a consequence, which is the legitimate need the `✅` was reaching for.
+
+The contradiction survived from the decision being written until the matrix was listed row by row against its tests in [`EVIDENCE.md`](../planning/implementation/EVIDENCE.md). Two documents can disagree indefinitely while each is only ever read alone.
 
 ### Enforcement: scope the query, do not check after reading
 
@@ -58,3 +62,5 @@ Deferred to [the technical baseline](12-lock-core-technical-baseline.md) as a te
 ### Testing obligation
 
 **Every ownership rule in the matrix above requires a negative test**: a Club Officer of Club A attempting the operation on Club B's resource and receiving not-found. An ownership rule with only a positive test is an ownership rule that has not been shown to exist, and the implementation Issues must treat the negative case as part of the feature rather than as extra coverage.
+
+The mapping from each row to the test that refuses it is written down in [`EVIDENCE.md`](../planning/implementation/EVIDENCE.md). The tests live beside the modules they cover, so nothing but that mapping shows the set is complete.

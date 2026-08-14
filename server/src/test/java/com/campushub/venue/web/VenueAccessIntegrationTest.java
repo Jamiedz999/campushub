@@ -98,13 +98,11 @@ class VenueAccessIntegrationTest {
         HttpResponse<String> listed = officer.get("/venues?page=0&size=100");
         assertThat(listed.statusCode()).isEqualTo(200);
         assertThat(listed.body()).contains(venueId, "Main Sports Hall");
-        assertThat(officer.post("/venues", "{\"name\":\"Not allowed\"}").statusCode())
-                .isEqualTo(404);
+        assertNotFound(officer.post("/venues", "{\"name\":\"Not allowed\"}"));
 
         Session student = Session.signIn(port, studentEmail, PASSWORD);
-        assertThat(student.get("/venues").statusCode()).isEqualTo(404);
-        assertThat(student.post("/venues", "{\"name\":\"Not allowed\"}").statusCode())
-                .isEqualTo(404);
+        assertNotFound(student.get("/venues"));
+        assertNotFound(student.post("/venues", "{\"name\":\"Not allowed\"}"));
     }
 
     @Test
@@ -121,11 +119,9 @@ class VenueAccessIntegrationTest {
         assertThat(day.body()).contains(eventId, "\"startMinute\":600", "\"endMinute\":660");
 
         Session otherOfficer = Session.signIn(port, officerBEmail, PASSWORD);
-        assertThat(otherOfficer.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
-                .isEqualTo(404);
+        assertNotFound(otherOfficer.put("/events/" + eventId + "/slot", slot(venueId)));
         Session student = Session.signIn(port, studentEmail, PASSWORD);
-        assertThat(student.get("/venues/" + venueId + "/days/2099-03-20").statusCode())
-                .isEqualTo(404);
+        assertNotFound(student.get("/venues/" + venueId + "/days/2099-03-20"));
 
         assertThat(officer.delete("/events/" + eventId + "/slot").statusCode())
                 .isEqualTo(204);
@@ -143,12 +139,10 @@ class VenueAccessIntegrationTest {
         Session officer = Session.signIn(port, officerAEmail, PASSWORD);
         String eventId = extractId(officer.createDraft(clubAId, "Officer-owned Event").body());
 
-        assertThat(admin.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
-                .isEqualTo(404);
+        assertNotFound(admin.put("/events/" + eventId + "/slot", slot(venueId)));
         assertThat(officer.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
                 .isEqualTo(204);
-        assertThat(admin.delete("/events/" + eventId + "/slot").statusCode())
-                .isEqualTo(404);
+        assertNotFound(admin.delete("/events/" + eventId + "/slot"));
         assertThat(officer.get("/events/" + eventId).body()).contains("\"venueId\":\"" + venueId + "\"");
     }
 
@@ -175,6 +169,37 @@ class VenueAccessIntegrationTest {
         return "{\"venueId\":\"" + venueId + "\","
                 + "\"startsAt\":\"2099-03-20T10:00:00Z\","
                 + "\"endsAt\":\"2099-03-20T11:00:00Z\"}";
+    }
+
+    // The Venue Slot row of the permission matrix, standing on its own rather than as three assertions
+    // inside the Officer's happy path: a Slot is booked against an Event, so the Event's Club is what
+    // decides, and an Officer of another Club is refused exactly as a Student is. See
+    // docs/adr/08-define-roles-and-resource-authorization.md.
+    @Test
+    void neitherAnOfficerOfAnotherClubNorAStudentCanBookOrReleaseAnEventsSlot() throws Exception {
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+        String venueId = extractId(admin.post("/venues", "{\"name\":\"Cross-club Hall\"}").body());
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId, "Club A's Event").body());
+
+        Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
+        Session student = Session.signIn(port, studentEmail, PASSWORD);
+
+        assertNotFound(officerB.put("/events/" + eventId + "/slot", slot(venueId)));
+        assertNotFound(officerB.delete("/events/" + eventId + "/slot"));
+        assertNotFound(student.put("/events/" + eventId + "/slot", slot(venueId)));
+        assertNotFound(student.delete("/events/" + eventId + "/slot"));
+        assertNotFound(student.get("/venues/" + venueId + "/days/2099-03-20"));
+        // The owning Officer still books it, so the refusals above are a boundary, not a broken route.
+        assertThat(officerA.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
+                .isEqualTo(204);
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
     }
 
     private static String extractId(String body) {

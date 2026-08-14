@@ -189,6 +189,8 @@ docker compose down
 
 `npm run check` runs TypeScript checking, Vitest once with coverage, and a production build. `mvnw verify` runs Checkstyle, SpotBugs, the tests and the JaCoCo gate. Cypress runs as its own CI job against the composed stack, introduced by the Issue that first needs it.
 
+The concurrency tests run inside `mvnw verify` like everything else. `./server/mvnw verify -Pconcurrency` runs **only** them — the four atomicity claims, gathered by `@Tag("concurrency")` rather than by a directory so each stays beside the module it guards. It is a development convenience, not a build contract: it skips coverage and the linters, and CI runs the unprofiled command. See [`EVIDENCE.md`](EVIDENCE.md).
+
 **The coverage gate is 90% from the scaffold Issue onward and is never lowered.** It is not raised gradually and it is not retrofitted: a gate that arrives late is a gate that arrives after the untested code, and the only way to meet it then is padding. Counting is **JaCoCo line and branch**, both at 90%. The only permitted exclusions are `**/config/**`, `**/*Application.class`, and DTO/record types with no behaviour; any exclusion beyond those is named and justified in the pull request that adds it. If the gate blocks, the tests are missing — that is the gate working.
 
 ## Explicitly absent from Core

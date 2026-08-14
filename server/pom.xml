@@ -321,4 +321,26 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- The concurrency suite on its own: `./mvnw verify -Pconcurrency` from server/.
+
+         The four claims live beside the modules they guard rather than in a directory of their own, so
+         nothing but the @Tag("concurrency") marker gathers them; this profile is what makes that tag
+         runnable as one suite. The tag is on integration tests, so both Surefire and Failsafe are
+         filtered by it — `groups` is the user property of each.
+
+         Coverage and the linters are off here on purpose. A four-test run cannot meet a whole-project
+         coverage gate, and a profile that lowered the gate to fit would be exactly the exclusion the
+         Issue forbids. `./mvnw verify` with no profile is still the command that enforces them. -->
+    <profile>
+      <id>concurrency</id>
+      <properties>
+        <groups>concurrency</groups>
+        <jacoco.skip>true</jacoco.skip>
+        <checkstyle.skip>true</checkstyle.skip>
+        <spotbugs.skip>true</spotbugs.skip>
+      </properties>
+    </profile>
+  </profiles>
 </project>

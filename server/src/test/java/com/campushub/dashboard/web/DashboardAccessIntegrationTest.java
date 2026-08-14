@@ -123,15 +123,14 @@ class DashboardAccessIntegrationTest {
 
         HttpResponse<String> refused = officer.get("/dashboard?clubId=" + otherClubId);
 
-        assertThat(refused.statusCode()).isEqualTo(404);
-        assertThat(refused.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(refused);
     }
 
     @Test
     void aStudentWhoOfficersNothingHasNoDashboard() throws Exception {
         Session student = Session.signIn(port, studentEmail, PASSWORD);
 
-        assertThat(student.get("/dashboard").statusCode()).isEqualTo(404);
+        assertNotFound(student.get("/dashboard"));
     }
 
     @Test
@@ -174,6 +173,13 @@ class DashboardAccessIntegrationTest {
                 .body();
 
         assertThat(body).contains("\"eventsRun\":0").contains("\"events\":[]");
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
     }
 
     private void insertFinishedEvent(String owningClubId, String title) {

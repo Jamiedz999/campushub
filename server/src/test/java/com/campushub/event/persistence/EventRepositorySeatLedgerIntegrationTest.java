@@ -234,6 +234,34 @@ class EventRepositorySeatLedgerIntegrationTest {
         assertThat(event.getEverQueuedCount()).isEqualTo(1);
     }
 
+    // The freeze is a guard, not a moment. The test above pins the exact instant, which is where an
+    // off-by-one lives; this one pins the half-open interval after it, which is where a guard written as
+    // `now == startsAt` would pass the instant and let every later write through. A Roster the door
+    // checks against cannot change once the Event has started — including after it has ended.
+    @Test
+    void everySeatLedgerWriteStaysRefusedAfterTheEventHasStarted() {
+        String id = publishedEvent(1);
+        repository.takeSeat(id, "student-1", WITHIN_WINDOW);
+        repository.joinWaitlist(id, "student-2", WITHIN_WINDOW);
+        EventEdit raiseCapacity = new EventEdit(null, null, null, null, null, null, 2);
+
+        for (Instant afterStart : List.of(STARTS.plusSeconds(1), ENDS, ENDS.plusSeconds(86_400))) {
+            assertThat(repository.takeSeat(id, "student-3", afterStart)).isFalse();
+            assertThat(repository.joinWaitlist(id, "student-3", afterStart)).isFalse();
+            assertThat(repository.leaveWaitlist(id, "student-2", afterStart)).isFalse();
+            assertThat(repository.withdrawEnrolled(id, "student-1", afterStart)).isFalse();
+            assertThat(repository.edit(id, Set.of("club-a"), raiseCapacity, afterStart)).isFalse();
+        }
+
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getCapacity()).isEqualTo(1);
+        assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
+        assertThat(event.getWaitlist()).containsExactly("student-2");
+        // No withdrawal succeeded, so nothing freed a Seat, so nobody was promoted into the frozen Roster.
+        assertThat(event.getPromotedCount()).isZero();
+        assertThat(event.getEverQueuedCount()).isEqualTo(1);
+    }
+
     @Test
     void takeSeatFailsBeforeRegistrationOpens() {
         String id = publishedEvent(5);
