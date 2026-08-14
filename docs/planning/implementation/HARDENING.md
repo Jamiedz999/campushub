@@ -10,6 +10,8 @@ Gate: [Core Acceptance](../13-set-core-boundary-and-sprints.md#core-acceptance)
 
 It is a separate file rather than more sections in `EVIDENCE.md` because that document is the concurrency and authorization argument and is referenced as such from two ADRs and the map. Same shape of claim, different claim.
 
+A fourth of the same shape was added while checking [#11](https://github.com/Jamiedz999/campushub/issues/11) — **every REST endpoint has a Testcontainers integration test** — and is [the last section](#the-endpoint-coverage-sweep) here.
+
 ## What is not there
 
 Each claim is stated the way it would be tested if it were false, with the control that stops the test passing for the wrong reason.
@@ -64,3 +66,41 @@ The gate is JaCoCo ≥ 90% line and branch on the backend and Vitest ≥ 90% on 
 The baseline also permits excluding DTO records with no behaviour. None is excluded: ours all carry a `from(...)` projection, which is exactly the code a role-specific DTO must be right about.
 
 **No new exclusion was added by this work.** The axe helper is test-only and would have been the obvious candidate; it earns its coverage from `testAccessibility.test.ts` instead, which is the test that proves the helper reports violations at all.
+
+## The endpoint coverage sweep
+
+Core Acceptance asks for **Testcontainers integration tests covering every REST endpoint**. That is a claim about a set, and a set is the one thing a passing build cannot show you: a route with no test does not fail anything. It was true when it was last checked, on 2026-08-14, and it was not true before that check — which is the reason for writing the check down rather than the result.
+
+The routes are enumerated from the source, never from a list kept by hand:
+
+```bash
+cd server && grep -rn -E '@(Get|Post|Put|Delete|Patch)Mapping' src/main/java --include='*.java'
+```
+
+**32 routes: 30 mapped by a controller, plus the two Spring Security serves from the filter chain.** Each is covered by a test that exercises what the route does over real HTTP against Testcontainers MongoDB:
+
+| Routes | Covered by |
+|---|---|
+| `GET /api/system` | `system.web.SystemControllerIntegrationTest` |
+| `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/logout` | `identityaccess.internal.SecurityConfigIntegrationTest` — the last two have no controller and appear in no routing table |
+| `POST /api/clubs/{clubId}/events`, `GET /api/events/{eventId}`, `PATCH /api/events/{eventId}`, `POST …/publication`, `POST …/cancellation` | `event.web.EventOfficerAccessIntegrationTest` |
+| `GET /api/events`, `GET`/`POST`/`DELETE /api/events/{eventId}/registration`, `PUT …/registration/answers`, `GET /api/events/mine`, `PUT …/registration-form`, `GET …/registration-answers`, `GET …/registration-answers/csv` | `event.web.EventRegistrationAccessIntegrationTest` |
+| `GET …/door-code`, `POST`/`GET …/attendance`, `PUT …/attendance/{studentId}` | `checkin.web.CheckInAccessIntegrationTest` |
+| `PUT`/`DELETE /api/events/{eventId}/slot`, `POST`/`GET /api/venues`, `PATCH /api/venues/{venueId}`, `GET /api/venues/{venueId}/days/{date}` | `venue.web.VenueAccessIntegrationTest` |
+| `GET /api/dashboard` | `dashboard.web.DashboardAccessIntegrationTest` |
+| `GET`/`POST /api/clubs/{clubId}/officers`, `DELETE …/officers/{accountId}` | `identityaccess.web.ClubOfficerAccessIntegrationTest` |
+
+### What "covered" is not allowed to mean
+
+`RoutingTableSweepIntegrationTest` reaches **every** mapped route over real HTTP, and it is deliberately not counted here. It asserts that a route refuses a request without the CSRF token, that the same route answers once the token is carried, and that no form answer appears in the body — never anything about what the route is for. Counting it would let this whole claim be satisfied by two tests that cannot tell a working endpoint from a broken one. It is a sweep for one property across all routes; this table is one behavioural test per route, and they are different obligations.
+
+### What the sweep found
+
+Two routes had no such test when it was run, and both looked covered from a distance:
+
+- **`PUT /api/events/{eventId}/registration/answers`** — the retry path behind "your Seat is safe, but your answers were not saved". Tested only against a mocked repository (`RegistrationModuleImplTest`) and a mocked module (`RegistrationControllerTest`).
+- **`GET /api/events`** — the catalogue. Tested at the repository, against real Mongo, by `EventRepositoryBrowseIntegrationTest`, and at the controller against a mocked module. Nothing joined the two ends, so parameter binding and the Published-only rule were proven separately from each other and never together.
+
+Both now have one in `EventRegistrationAccessIntegrationTest`. The retry test was run once with the answer write removed from `RegistrationModuleImpl.retryAnswers` and failed on the read-back assertion, for the same reason [the guard-removal record](EVIDENCE.md#the-guard-removal-record) exists: a test that passes with its subject deleted was not testing it.
+
+**The maintenance obligation:** a new route is a new row. The grep above regenerates the left column in one command, so the check is cheap; nothing in the build enforces it, which is stated here rather than left to be discovered.
