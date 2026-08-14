@@ -2,6 +2,7 @@ package com.campushub.identityaccess;
 
 import com.campushub.identityaccess.domain.CurrentActor;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public interface IdentityAccessModule {
@@ -15,4 +16,7 @@ public interface IdentityAccessModule {
 
     /** Display names for Officer-only Registration answer reports; absent ids remain absent. */
     Map<String, String> displayNames(Set<String> accountIds);
+
+    /** The account id for a known email, if one exists. */
+    Optional<String> findAccountIdByEmail(String email);
 }

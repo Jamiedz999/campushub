@@ -50,7 +50,7 @@ class SeedingIntegrationTest {
         try {
             MongoTemplate mongoTemplate = context.getBean(MongoTemplate.class);
 
-            assertThat(mongoTemplate.findAll(Club.class)).hasSize(2);
+            assertThat(mongoTemplate.findAll(Club.class)).hasSize(3);
             java.util.List<Account> accounts = mongoTemplate.findAll(Account.class);
             assertThat(accounts)
                     .extracting(Account::getEmail)

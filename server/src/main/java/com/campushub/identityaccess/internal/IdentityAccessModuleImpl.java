@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -47,5 +48,10 @@ class IdentityAccessModuleImpl implements IdentityAccessModule {
     public Map<String, String> displayNames(Set<String> accountIds) {
         return accountRepository.findByIds(accountIds).stream()
                 .collect(Collectors.toUnmodifiableMap(Account::getId, Account::getDisplayName));
+    }
+
+    @Override
+    public Optional<String> findAccountIdByEmail(String email) {
+        return accountRepository.findByEmail(email).map(Account::getId);
     }
 }
