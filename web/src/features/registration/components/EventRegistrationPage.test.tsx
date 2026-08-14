@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
 import type { EventRegistrationView } from "../types";
+import { accessibilityViolations } from "../../../testSupport/accessibility";
 import { EventRegistrationPage } from "./EventRegistrationPage";
 
 function axiosResponse<T>(data: T) {
@@ -426,5 +427,14 @@ describe("EventRegistrationPage", () => {
     renderPage();
     await user.click(await screen.findByRole("button", { name: "Leave the Waitlist" }));
     expect(screen.getByRole("button", { name: "Leaving…" })).toBeDisabled();
+  });
+
+  it("has no accessibility violations", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({})));
+
+    const { container } = renderPage();
+
+    await screen.findByText("Robotics Night");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

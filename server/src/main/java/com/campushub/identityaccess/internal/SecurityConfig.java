@@ -36,7 +36,7 @@ class SecurityConfig {
             JsonLogoutSuccessHandler logoutSuccessHandler,
             ProblemDetailAuthenticationEntryPoint authenticationEntryPoint)
             throws Exception {
-        http.csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+        http.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.POST, "/api/auth/login")
@@ -65,5 +65,17 @@ class SecurityConfig {
                         logout.logoutUrl("/api/auth/logout").logoutSuccessHandler(logoutSuccessHandler))
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint));
         return http.build();
+    }
+
+    // The XSRF-TOKEN cookie is readable by script on purpose — that is the whole double-submit
+    // mechanism, and the frontend's axios instance reads it back into the X-XSRF-TOKEN header. Its
+    // other two attributes are stated rather than left to the default: SameSite=Lax for the same
+    // reason as the session cookie (application.yml explains it), and Secure mirroring the request's
+    // scheme, which is Spring's own default and is repeated here so that a reader of this file sees
+    // both cookies decided in the same place.
+    private static CookieCsrfTokenRepository csrfTokenRepository() {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieCustomizer(cookie -> cookie.sameSite("Lax"));
+        return repository;
     }
 }

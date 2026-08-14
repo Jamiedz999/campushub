@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiError";
 import { httpClient } from "../lib/httpClient";
+import { accessibilityViolations } from "../testSupport/accessibility";
 import { SignInPage } from "./SignInPage";
 
 const UNAUTHENTICATED = new ApiError({
@@ -26,7 +27,7 @@ function renderSignInPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/sign-in"]}>
         <Routes>
@@ -101,5 +102,24 @@ describe("SignInPage", () => {
     renderSignInPage();
 
     expect(await screen.findByText("Home page")).toBeInTheDocument();
+  });
+
+  // The first surface a Student ever meets, and the one they meet on a phone.
+  it("has no accessibility violations, sitting idle or showing a refusal", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockRejectedValue(UNAUTHENTICATED);
+    vi.spyOn(httpClient, "post").mockRejectedValue(
+      new ApiError({ code: "INVALID_CREDENTIALS", status: 401, title: "Unauthenticated", detail: "no" }),
+    );
+
+    const { container } = renderSignInPage();
+    expect(await accessibilityViolations(container)).toEqual([]);
+
+    await user.type(await screen.findByLabelText(/email/i), "student@demo.campushub");
+    await user.type(screen.getByLabelText(/password/i), "wrong");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await screen.findByRole("alert");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

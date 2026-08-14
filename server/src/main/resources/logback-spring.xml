@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The console layout, replacing Boot's default for two reasons and no others.
+
+  1. Every line carries the request's correlation id, so the id on the response header is the id you
+     grep the logs for. A line written outside a request says "no-request" rather than nothing, which
+     is a fact worth reading rather than an empty pair of brackets.
+  2. The message and the stack trace go through %redact, so an identifier cannot reach a log line
+     even from code that has never heard of this file. See com.campushub.shared.logging.LogRedaction.
+
+  Everything else — levels, the file appender, logging.level.* from application.yml — is still Boot's,
+  because this file only replaces the layout and Boot applies its properties on top of it.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <conversionRule conversionWord="redact" converterClass="com.campushub.shared.logging.RedactingConverter"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} %5p [%X{correlationId:-no-request}] %-40.40logger{39} : %redact(%m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx})</pattern>
+            <charset>${CONSOLE_LOG_CHARSET:-UTF-8}</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

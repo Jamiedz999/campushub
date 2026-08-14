@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
+import { accessibilityViolations } from "../../../testSupport/accessibility";
 import { StudentCheckInPage } from "./StudentCheckInPage";
 
 const TOKEN = "event-1.29566667.signature";
@@ -160,5 +161,30 @@ describe("StudentCheckInPage", () => {
     renderPage();
 
     expect(await screen.findByText("Check-in is closed")).toBeInTheDocument();
+  });
+
+  // The Student's half of the door, on a phone, often one-handed in a queue. Every state it can be in
+  // gets the same structural check, because the state a Student most needs to read is the refusal.
+  it.each([
+    ["the ready screen, before a code has been scanned", "" as const],
+    ["the screen a scan lands on", `?token=${TOKEN}` as const],
+  ])("has no accessibility violations on %s", async (_name, search) => {
+    vi.spyOn(httpClient, "post").mockResolvedValue(
+      axiosResponse({ eventId: "event-1", eventTitle: "Intro to Climbing", at: "2026-03-20T18:04:00Z" }),
+    );
+
+    const { container } = renderPage(search);
+
+    await screen.findByRole("heading", { level: 1 });
+    expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  it("has no accessibility violations on a refusal, which is the state that most needs reading", async () => {
+    vi.spyOn(httpClient, "post").mockRejectedValue(refusal("CODE_EXPIRED"));
+
+    const { container } = renderPage();
+
+    await screen.findByRole("button");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

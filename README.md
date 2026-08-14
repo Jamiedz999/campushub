@@ -118,6 +118,18 @@ that proves it rather than just asserting it.
   — and Cypress's retry count is zero, because a journey that needs a second attempt is a journey
   that is wrong. `web/cypress/e2e/`.
 
+- **The logs cannot name a Student, so the response header is what you trace by instead.** Email
+  addresses and identifiers are masked in the log layout rather than at the call sites, which means a
+  line written inside Spring, inside a library, or in code nobody has written yet is redacted on the
+  way out too. That costs the logs their identifiers, so every request is given a correlation id
+  before the security filter chain sees it — carried on every line it writes and on the response,
+  including the 401 that never reached a controller — and that id is the handle a bug report starts
+  from. Proven from both ends: a full journey whose log output contains no Student identifier
+  (`RedactedLoggingIntegrationTest.aFullJourneyLeavesNoStudentIdentifierInTheLogOutput`), and a line
+  that deliberately logs one and is watched coming out masked, because otherwise a clean grep would
+  only prove that nothing had tried
+  (`server/src/test/java/com/campushub/shared/logging/RedactedLoggingIntegrationTest.java`).
+
 ## What this deliberately doesn't do
 
 Promotion never holds a Seat with a timeout — a promoted Student is enrolled outright, because

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
 import { DoorSocketDouble } from "../__doorSocketDouble";
+import { accessibilityViolations } from "../../../testSupport/accessibility";
 import { OfficerDoorPage } from "./OfficerDoorPage";
 
 const DOOR_CODE = {
@@ -274,5 +275,45 @@ describe("OfficerDoorPage", () => {
     act(() => DoorSocketDouble.current().connect());
 
     await waitFor(() => expect(live).toHaveTextContent("Counting live as people scan."));
+  });
+
+  // The projected screen, checked for the half of accessibility a renderer can see: names on the
+  // controls, a name on the QR code, valid ARIA, heading order, landmarks, list structure. The other
+  // half — contrast and size, which is the half that actually decides whether this screen works from
+  // the back of a room — is held to a number in doorScreenLegibility.test.ts, because jsdom has no
+  // layout to measure and no canvas to sample a colour from.
+  it("has no accessibility violations while the door is open", async () => {
+    mockReads();
+
+    const { container } = renderPage();
+
+    await screen.findByRole("list", { name: "Enrolled students" });
+    expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  it("has no accessibility violations while the door is shut", async () => {
+    mockReads({ ...DOOR_CODE, checkInOpen: false });
+
+    const { container } = renderPage();
+
+    await screen.findByText(/check-in opens at 17:45/i);
+    expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  // A projector showing an error is still a projector at the front of a room, so the failure states
+  // are a screen with a heading rather than a stray sentence.
+  it("has no accessibility violations when the door screen cannot be opened at all", async () => {
+    vi.spyOn(httpClient, "get").mockRejectedValue(new ApiError({
+      code: "NOT_FOUND",
+      status: 404,
+      title: "Not Found",
+      detail: "No such Event.",
+      extensions: {},
+    }));
+
+    const { container } = renderPage();
+
+    await screen.findByRole("alert");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });
