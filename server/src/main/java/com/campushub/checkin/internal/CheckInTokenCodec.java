@@ -43,15 +43,26 @@ class CheckInTokenCodec {
         EXPIRED
     }
 
-    /** {@code eventId} is present only on a VALID verification; a rejected code names no Event. */
+    /**
+     * {@code eventId} is present whenever the signature verifies — VALID or EXPIRED — because at that
+     * point the Event it names is authenticated, whether or not the code is still fresh. Only INVALID
+     * names no Event: nothing in an unsigned code can be believed, including which door it claims.
+     *
+     * <p>That distinction is what lets the caller tell "your code is stale, scan again" apart from
+     * "your code is for another door, and scanning again here will never work".
+     */
     record Verification(TokenStatus status, String eventId) {
 
         static Verification valid(String eventId) {
             return new Verification(TokenStatus.VALID, eventId);
         }
 
-        static Verification rejected(TokenStatus status) {
-            return new Verification(status, null);
+        static Verification expired(String eventId) {
+            return new Verification(TokenStatus.EXPIRED, eventId);
+        }
+
+        static Verification invalid() {
+            return new Verification(TokenStatus.INVALID, null);
         }
     }
 
@@ -88,27 +99,27 @@ class CheckInTokenCodec {
     Verification verify(String token, Instant now) {
         String[] parts = token.split("\\" + SEPARATOR, -1);
         if (parts.length != PART_COUNT || parts[0].isEmpty()) {
-            return Verification.rejected(TokenStatus.INVALID);
+            return Verification.invalid();
         }
         String eventId = parts[0];
         long windowIndex;
         try {
             windowIndex = Long.parseLong(parts[1]);
         } catch (NumberFormatException notAWindowIndex) {
-            return Verification.rejected(TokenStatus.INVALID);
+            return Verification.invalid();
         }
         // Constant-time: the signature is compared before the window is, so a forged code learns
         // nothing from how long the answer took.
         if (!MessageDigest.isEqual(
                 sign(eventId, windowIndex).getBytes(StandardCharsets.UTF_8),
                 parts[2].getBytes(StandardCharsets.UTF_8))) {
-            return Verification.rejected(TokenStatus.INVALID);
+            return Verification.invalid();
         }
         long currentWindow = windowIndexOf(now);
         boolean accepted = windowIndex == currentWindow || windowIndex == currentWindow - 1;
         // A window that has not arrived yet is a phone clock running ahead, not an attack, and the
         // Student's way through is the same as for a stale one: scan the screen again.
-        return accepted ? Verification.valid(eventId) : Verification.rejected(TokenStatus.EXPIRED);
+        return accepted ? Verification.valid(eventId) : Verification.expired(eventId);
     }
 
     private static long windowIndexOf(Instant now) {

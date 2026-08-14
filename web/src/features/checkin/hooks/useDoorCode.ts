@@ -6,8 +6,9 @@ import type { DoorCode } from "../types";
 /**
  * The displayed code, re-read well inside its own lifetime. A code stays valid for its window and the
  * one after it — 60 to 120 seconds — so refreshing every 15 seconds means the screen is never showing
- * a code the server would refuse, and the attendance count on the same response stays close to live
- * until the WebSocket push arrives.
+ * a code the server would refuse, whatever the drift between this browser's clock and the server's.
+ *
+ * This timer is about the code rotating, and nothing else. It carries no attendance.
  */
 export const DOOR_CODE_REFRESH_MS = 15_000;
 

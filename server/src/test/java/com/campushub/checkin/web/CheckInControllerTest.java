@@ -56,7 +56,6 @@ class CheckInControllerTest {
         DoorCodeResponse response = controller.doorCode("event-1");
 
         assertThat(response.token()).isEqualTo("event-1.29566667.signature");
-        assertThat(response.attendedCount()).isEqualTo(23);
         assertThat(response.checkInOpen()).isTrue();
     }
 
@@ -137,10 +136,7 @@ class CheckInControllerTest {
                 AT.plusSeconds(41),
                 AT.minusSeconds(1500),
                 AT.plusSeconds(3600),
-                true,
-                40,
-                30,
-                23);
+                true);
     }
 
     private static CurrentActor officer() {

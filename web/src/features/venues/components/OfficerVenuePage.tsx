@@ -10,7 +10,8 @@ import {
   releaseVenueSlot,
 } from "../api/venueBooking";
 import type { VenueBookingEvent, VenueDay, VenuePage } from "../types";
-import { campusDate, formatCampusTime, formatMinute } from "../venueTime";
+import { formatCampusTime } from "../../../lib/campusTimeZone";
+import { campusDate, formatMinute } from "../venueTime";
 
 interface BookingChoice {
   eventId: string;

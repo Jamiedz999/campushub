@@ -154,9 +154,6 @@ class EventModuleImplAttendanceTest {
         assertThat(door.checkInOpensAt()).isEqualTo(STARTS.minusSeconds(900));
         assertThat(door.checkInClosesAt()).isEqualTo(ENDS);
         assertThat(door.checkInOpen()).isTrue();
-        assertThat(door.enrolledCount()).isEqualTo(1);
-        assertThat(door.attendedCount()).isEqualTo(1);
-        assertThat(door.capacity()).isEqualTo(40);
     }
 
     @Test
@@ -202,8 +199,6 @@ class EventModuleImplAttendanceTest {
 
         AttendanceRoster roster = module.findAttendanceForOfficer("event-1", CLUB_IDS).orElseThrow();
 
-        assertThat(roster.enrolledCount()).isEqualTo(2);
-        assertThat(roster.attendedCount()).isEqualTo(1);
         assertThat(roster.items())
                 .containsExactly(
                         new AttendanceRosterEntry("present-student", scannedAt, AttendanceMethod.SCANNED),

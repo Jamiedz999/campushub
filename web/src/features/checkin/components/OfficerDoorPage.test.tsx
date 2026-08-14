@@ -16,31 +16,15 @@ const DOOR_CODE = {
   checkInOpensAt: "2026-03-20T17:45:00Z",
   checkInClosesAt: "2026-03-20T20:00:00Z",
   checkInOpen: true,
-  capacity: 40,
-  enrolledCount: 3,
-  attendedCount: 2,
 };
 
 const ROSTER = {
   eventId: "event-1",
   title: "Intro to Climbing",
-  capacity: 40,
-  enrolledCount: 3,
-  attendedCount: 2,
   items: [
-    {
-      studentId: "student-1",
-      displayName: "R. Nolan",
-      attendedAt: "2026-03-20T18:04:00Z",
-      method: "SCANNED",
-    },
-    {
-      studentId: "student-2",
-      displayName: "S. Kaur",
-      attendedAt: "2026-03-20T18:09:00Z",
-      method: "MANUAL",
-    },
-    { studentId: "student-3", displayName: "T. Adeyemi", attendedAt: null, method: null },
+    { studentId: "student-1", displayName: "R. Nolan", at: "2026-03-20T18:04:00Z", method: "SCANNED" },
+    { studentId: "student-2", displayName: "S. Kaur", at: "2026-03-20T18:09:00Z", method: "MANUAL" },
+    { studentId: "student-3", displayName: "T. Adeyemi", at: null, method: null },
   ],
 };
 
@@ -98,7 +82,9 @@ describe("OfficerDoorPage", () => {
     expect(container.querySelectorAll("path").length).toBeGreaterThan(0);
   });
 
-  it("shows the live count against the Roster", async () => {
+  // Derived from the Roster the override already reads, not sent by the door-code endpoint: pushing
+  // attendance out as it happens is Issue #9, and polling for it here would pre-empt that decision.
+  it("derives the count from the Roster rather than reading one off the code", async () => {
     mockReads();
 
     renderPage();
@@ -106,6 +92,7 @@ describe("OfficerDoorPage", () => {
     const doorCode = await screen.findByRole("region", { name: "Door code" });
     expect(within(doorCode).getByText("2")).toBeInTheDocument();
     expect(within(doorCode).getByText("/ 3")).toBeInTheDocument();
+    expect(within(doorCode).getByText(/1 marked by hand/i)).toBeInTheDocument();
     expect(within(doorCode).getByText(/rotates at 18:05/i)).toBeInTheDocument();
   });
 
@@ -168,7 +155,7 @@ describe("OfficerDoorPage", () => {
   });
 
   it("says so when nobody holds a Seat yet", async () => {
-    mockReads(DOOR_CODE, { ...ROSTER, enrolledCount: 0, attendedCount: 0, items: [] });
+    mockReads(DOOR_CODE, { ...ROSTER, items: [] });
 
     renderPage();
 

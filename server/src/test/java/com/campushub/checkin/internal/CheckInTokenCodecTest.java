@@ -59,8 +59,10 @@ class CheckInTokenCodecTest {
         String token = codec.issue(EVENT_ID, ISSUED_AT);
         Instant firstRejectedInstant = WINDOW_STARTED_AT.plus(WINDOW).plus(WINDOW);
 
+        // A stale code still names its Event: the signature over it verified, so which door it is for
+        // is authenticated even though it is no longer fresh.
         assertThat(codec.verify(token, firstRejectedInstant))
-                .isEqualTo(new Verification(TokenStatus.EXPIRED, null));
+                .isEqualTo(new Verification(TokenStatus.EXPIRED, EVENT_ID));
     }
 
     @Test
@@ -75,6 +77,7 @@ class CheckInTokenCodecTest {
         String token = codec.issue(EVENT_ID, ISSUED_AT);
         String tampered = token.substring(0, token.length() - 1) + flip(token.charAt(token.length() - 1));
 
+        // Nothing in an unsigned code can be believed, including which door it claims to be for.
         assertThat(codec.verify(tampered, ISSUED_AT)).isEqualTo(new Verification(TokenStatus.INVALID, null));
     }
 

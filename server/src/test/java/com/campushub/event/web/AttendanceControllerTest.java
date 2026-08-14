@@ -56,15 +56,15 @@ class AttendanceControllerTest {
 
         AttendanceRosterResponse response = controller.roster("event-1");
 
-        assertThat(response.attendedCount()).isEqualTo(2);
         assertThat(response.items())
                 .containsExactly(
-                        new AttendanceRosterResponse.AttendeeResponse(
+                        new AttendanceRosterResponse.RosterEntryResponse(
                                 "scanned-student", "R. Nolan", AT, AttendanceMethod.SCANNED),
-                        new AttendanceRosterResponse.AttendeeResponse(
+                        new AttendanceRosterResponse.RosterEntryResponse(
                                 "manual-student", "S. Kaur", AT, AttendanceMethod.MANUAL),
                         // An account whose display name is missing falls back to its id rather than a blank.
-                        new AttendanceRosterResponse.AttendeeResponse("absent-student", "absent-student", null, null));
+                        new AttendanceRosterResponse.RosterEntryResponse(
+                                "absent-student", "absent-student", null, null));
     }
 
     @Test
@@ -133,9 +133,6 @@ class AttendanceControllerTest {
         return new AttendanceRoster(
                 "event-1",
                 "Intro to Climbing",
-                40,
-                3,
-                2,
                 List.of(
                         new AttendanceRosterEntry("scanned-student", AT, AttendanceMethod.SCANNED),
                         new AttendanceRosterEntry("manual-student", AT, AttendanceMethod.MANUAL),

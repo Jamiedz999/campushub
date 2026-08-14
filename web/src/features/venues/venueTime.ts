@@ -1,7 +1,5 @@
 import { CAMPUS_TIME_ZONE } from "../../lib/campusTimeZone";
 
-export { formatCampusTime } from "../../lib/campusTimeZone";
-
 export function campusDate(instant: string): string {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: CAMPUS_TIME_ZONE,

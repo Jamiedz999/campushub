@@ -63,14 +63,12 @@ class CheckInModuleImplTest {
         assertThat(code.rotatesAt()).isEqualTo(codec.rotatesAt(NOW));
         assertThat(code.title()).isEqualTo("Intro to Climbing");
         assertThat(code.checkInOpen()).isTrue();
-        assertThat(code.attendedCount()).isEqualTo(23);
     }
 
     @Test
     void aCodeIsStillDerivedBeforeTheWindowOpensSoTheOfficerCanSetUpTheRoom() {
         DoorEvent notOpenYet = new DoorEvent(
-                EVENT_ID, "Intro to Climbing", NOW.plusSeconds(3600), NOW.plusSeconds(7200),
-                NOW.plusSeconds(2700), NOW.plusSeconds(7200), false, 40, 30, 0);
+                EVENT_ID, "Intro to Climbing", NOW.plusSeconds(2700), NOW.plusSeconds(7200), false);
         when(eventModule.findDoorEventForOfficer(EVENT_ID, CLUB_IDS)).thenReturn(Optional.of(notOpenYet));
 
         DoorCode code = module.issueDoorCode(EVENT_ID, CLUB_IDS).orElseThrow();
@@ -112,6 +110,18 @@ class CheckInModuleImplTest {
 
         ScanResult result = module.checkIn(EVENT_ID, otherDoor, "student-1");
 
+        assertThat(result).isEqualTo(ScanResult.refused(ScanOutcome.TOKEN_INVALID));
+        verify(eventModule, never()).recordScannedAttendance(anyString(), anyString());
+    }
+
+    @Test
+    void aStaleCodeFromAnotherEventsDoorIsTheWrongDoorRatherThanAStaleOne() {
+        String otherDoorLongAgo = codec.issue("68a1b2c3d4e5f60718293a4c", NOW.minusSeconds(180));
+
+        ScanResult result = module.checkIn(EVENT_ID, otherDoorLongAgo, "student-1");
+
+        // TOKEN_EXPIRED would tell this Student to scan the screen again, on a door that will never
+        // accept them however fresh their code is. Wrong door is the true and useful answer.
         assertThat(result).isEqualTo(ScanResult.refused(ScanOutcome.TOKEN_INVALID));
         verify(eventModule, never()).recordScannedAttendance(anyString(), anyString());
     }
@@ -165,14 +175,9 @@ class CheckInModuleImplTest {
         return new DoorEvent(
                 EVENT_ID,
                 "Intro to Climbing",
-                NOW.minusSeconds(600),
-                NOW.plusSeconds(3600),
                 NOW.minusSeconds(1500),
                 NOW.plusSeconds(3600),
-                true,
-                40,
-                30,
-                23);
+                true);
     }
 
     // Guards the assertion above that a rejected code never reaches event: any() would pass even if the

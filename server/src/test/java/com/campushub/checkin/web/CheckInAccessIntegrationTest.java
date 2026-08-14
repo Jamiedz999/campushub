@@ -120,7 +120,8 @@ class CheckInAccessIntegrationTest {
 
         assertThat(again.statusCode()).isEqualTo(409);
         assertThat(again.body()).contains("\"code\":\"ALREADY_CHECKED_IN\"").contains("\"at\":");
-        assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"attendedCount\":1");
+        // One record, not two: the roster names this Student once, scanned.
+        assertThat(scannedRows(officer.get("/events/" + eventId + "/attendance").body())).isEqualTo(1);
     }
 
     @Test
@@ -211,7 +212,7 @@ class CheckInAccessIntegrationTest {
         assertThat(marked.statusCode()).isEqualTo(204);
         String roster = officer.get("/events/" + eventId + "/attendance").body();
         assertThat(roster).contains("\"method\":\"SCANNED\"").contains("\"method\":\"MANUAL\"");
-        assertThat(roster).contains("\"attendedCount\":2");
+        assertThat(scannedRows(roster) + manualRows(roster)).isEqualTo(2);
     }
 
     @Test
@@ -227,7 +228,7 @@ class CheckInAccessIntegrationTest {
                 otherOfficer.put("/events/" + eventId + "/attendance/" + studentId, "");
 
         assertThat(refused.statusCode()).isEqualTo(404);
-        assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"attendedCount\":0");
+        assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"method\":null");
     }
 
     // An Event whose check-in window is already open and whose registration has not closed.
@@ -257,6 +258,18 @@ class CheckInAccessIntegrationTest {
             }
         }
         throw new AssertionError("No roster row with method " + method + " in " + rosterBody);
+    }
+
+    private static int scannedRows(String rosterBody) {
+        return countOf(rosterBody, "\"method\":\"SCANNED\"");
+    }
+
+    private static int manualRows(String rosterBody) {
+        return countOf(rosterBody, "\"method\":\"MANUAL\"");
+    }
+
+    private static int countOf(String body, String needle) {
+        return (body.length() - body.replace(needle, "").length()) / needle.length();
     }
 
     private static String extractString(String body, String field) {

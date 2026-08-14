@@ -4,8 +4,9 @@ import { formatCampusTime } from "../../../lib/campusTimeZone";
 import { useAttendanceRoster } from "../hooks/useAttendanceRoster";
 import { useDoorCode } from "../hooks/useDoorCode";
 import { useMarkPresent } from "../hooks/useMarkPresent";
+import { rosterProgress } from "../rosterProgress";
 import { scanUrl } from "../scanUrl";
-import type { Attendee } from "../types";
+import type { RosterEntry } from "../types";
 
 /**
  * The screen the Club Officer projects at the door, and the manual override beside it.
@@ -33,6 +34,7 @@ export function OfficerDoorPage() {
   }
 
   const code = doorCode.data;
+  const progress = rosterProgress(roster.data?.items ?? []);
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
@@ -56,10 +58,12 @@ export function OfficerDoorPage() {
         )}
         <div className="flex flex-col gap-2">
           <p className="text-5xl font-bold leading-none">
-            {code.attendedCount}
-            <span className="text-2xl font-normal text-slate-500"> / {code.enrolledCount}</span>
+            {progress.attended}
+            <span className="text-2xl font-normal text-slate-500"> / {progress.enrolled}</span>
           </p>
-          <p className="text-sm text-slate-500">checked in</p>
+          <p className="text-sm text-slate-500">
+            checked in{progress.manual > 0 && ` · ${progress.manual} marked by hand`}
+          </p>
           <p className="text-sm text-slate-500">
             Students scan the code themselves. It rotates at {formatCampusTime(code.rotatesAt)} and the
             screen refreshes on its own — a code that has just rotated still works for a minute.
@@ -81,15 +85,15 @@ export function OfficerDoorPage() {
             {roster.data.items.length === 0 ? (
               <li className="rounded border border-dashed p-3 text-slate-600">Nobody holds a Seat yet.</li>
             ) : (
-              roster.data.items.map((attendee) => (
-                <li key={attendee.studentId} className="flex items-center justify-between gap-3 rounded border p-3">
-                  <span>{attendee.displayName}</span>
+              roster.data.items.map((entry) => (
+                <li key={entry.studentId} className="flex items-center justify-between gap-3 rounded border p-3">
+                  <span>{entry.displayName}</span>
                   <span className="flex items-center gap-3">
-                    <span className="text-sm text-slate-600">{describeAttendance(attendee)}</span>
-                    {attendee.method === null && (
+                    <span className="text-sm text-slate-600">{describeAttendance(entry)}</span>
+                    {entry.method === null && (
                       <button
                         type="button"
-                        onClick={() => override.mutate(attendee.studentId)}
+                        onClick={() => override.mutate(entry.studentId)}
                         disabled={override.isPending}
                         className="rounded border px-3 py-1 disabled:opacity-50"
                       >
@@ -116,10 +120,10 @@ export function OfficerDoorPage() {
   );
 }
 
-function describeAttendance(attendee: Attendee): string {
-  if (attendee.method === null || attendee.attendedAt === null) {
+function describeAttendance(entry: RosterEntry): string {
+  if (entry.method === null || entry.at === null) {
     return "Not in";
   }
-  const at = formatCampusTime(attendee.attendedAt);
-  return attendee.method === "SCANNED" ? `Scanned ${at}` : `Manual ${at}`;
+  const at = formatCampusTime(entry.at);
+  return entry.method === "SCANNED" ? `Scanned ${at}` : `Manual ${at}`;
 }

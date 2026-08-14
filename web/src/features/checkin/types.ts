@@ -12,9 +12,6 @@ export interface DoorCode {
   checkInOpensAt: string;
   checkInClosesAt: string;
   checkInOpen: boolean;
-  capacity: number;
-  enrolledCount: number;
-  attendedCount: number;
 }
 
 export interface CheckInResult {
@@ -24,18 +21,20 @@ export interface CheckInResult {
   method: AttendanceMethod;
 }
 
-export interface Attendee {
+/**
+ * One holder of a Seat and their attendance, if any. "Roster" and "enrolled" are the glossary's words
+ * for this — see CONTEXT.md, which lists "attendee" under Avoid, because the Roster says who may
+ * attend, not who did. `at` is null until they are marked present, by either route.
+ */
+export interface RosterEntry {
   studentId: string;
   displayName: string;
-  attendedAt: string | null;
+  at: string | null;
   method: AttendanceMethod | null;
 }
 
 export interface AttendanceRoster {
   eventId: string;
   title: string;
-  capacity: number;
-  enrolledCount: number;
-  attendedCount: number;
-  items: Attendee[];
+  items: RosterEntry[];
 }

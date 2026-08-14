@@ -163,30 +163,29 @@ public interface EventModule {
         }
     }
 
-    /** What the Officer's door screen shows: no Student ids, only the counts and the window. */
+    /**
+     * What the Officer's door screen needs from the Event: which Event it is, and the window its codes
+     * will be judged against. No Student ids and no counts — those are the Roster's, below.
+     */
     record DoorEvent(
             String id,
             String title,
-            Instant startsAt,
-            Instant endsAt,
             Instant checkInOpensAt,
             Instant checkInClosesAt,
-            boolean checkInOpen,
-            int capacity,
-            int enrolledCount,
-            int attendedCount) {}
+            boolean checkInOpen) {}
 
     /** One enrolled Student and their attendance, if any — the door's manual-override list. */
-    record AttendanceRosterEntry(String studentId, Instant attendedAt, AttendanceMethod method) {}
+    record AttendanceRosterEntry(String studentId, Instant at, AttendanceMethod method) {}
 
-    /** Officer-only: the Roster with attendance against it. Waitlisted Students are not on it. */
-    record AttendanceRoster(
-            String eventId,
-            String title,
-            int capacity,
-            int enrolledCount,
-            int attendedCount,
-            List<AttendanceRosterEntry> items) {
+    /**
+     * Officer-only: the Roster with attendance against it. Waitlisted Students are not on it, because
+     * the Roster is the Seat Ledger frozen at the start and only a held Seat can be checked into.
+     *
+     * <p>Deliberately not the {@code { items, page, size, total }} envelope every other collection
+     * uses. The Roster is bounded by Capacity, the door reads it as one whole to decide who is missing,
+     * and a page of it would answer no question an Officer standing at a door actually has.
+     */
+    record AttendanceRoster(String eventId, String title, List<AttendanceRosterEntry> items) {
 
         public AttendanceRoster {
             items = List.copyOf(items);

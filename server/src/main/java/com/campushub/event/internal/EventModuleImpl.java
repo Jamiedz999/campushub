@@ -359,14 +359,9 @@ class EventModuleImpl implements EventModule {
         return repository.findScopedById(eventId, callerOfficerClubIds).map(event -> new DoorEvent(
                 event.getId(),
                 event.getTitle(),
-                event.getStartsAt(),
-                event.getEndsAt(),
                 checkInOpensAt(event),
                 event.getEndsAt(),
-                isCheckInOpen(event, now),
-                event.getCapacity(),
-                event.getEnrolled().size(),
-                event.getAttendance().size()));
+                isCheckInOpen(event, now)));
     }
 
     @Override
@@ -379,13 +374,7 @@ class EventModuleImpl implements EventModule {
                                     seat.studentId(), entry.at(), entry.method()))
                             .orElseGet(() -> new AttendanceRosterEntry(seat.studentId(), null, null)))
                     .toList();
-            return new AttendanceRoster(
-                    event.getId(),
-                    event.getTitle(),
-                    event.getCapacity(),
-                    event.getEnrolled().size(),
-                    event.getAttendance().size(),
-                    items);
+            return new AttendanceRoster(event.getId(), event.getTitle(), items);
         });
     }
 

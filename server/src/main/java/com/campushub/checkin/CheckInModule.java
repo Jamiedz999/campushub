@@ -21,7 +21,15 @@ import java.util.Set;
  */
 public interface CheckInModule {
 
-    /** What the Officer's door screen displays. The whole room scans the same code in the same window. */
+    /**
+     * The code the Officer's door screen displays, and the window it will be judged against. The whole
+     * room scans the same code in the same window.
+     *
+     * <p>It carries no attendance count. How many people are in the room is a Seat Ledger reading, it
+     * arrives with the Roster the manual override already reads, and pushing it out live is
+     * <a href="https://github.com/Jamiedz999/campushub/issues/9">its own Issue</a> — polling it here
+     * would be that deferred decision made by accident.
+     */
     record DoorCode(
             String eventId,
             String title,
@@ -29,10 +37,7 @@ public interface CheckInModule {
             Instant rotatesAt,
             Instant checkInOpensAt,
             Instant checkInClosesAt,
-            boolean checkInOpen,
-            int capacity,
-            int enrolledCount,
-            int attendedCount) {}
+            boolean checkInOpen) {}
 
     /**
      * Every way a scan can end. TOKEN_INVALID is a signature this server did not produce — the only

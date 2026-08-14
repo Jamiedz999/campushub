@@ -7,6 +7,7 @@ import com.campushub.event.EventModule;
 import com.campushub.event.EventModule.AttendanceResult;
 import com.campushub.event.EventModule.DoorEvent;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Component;
@@ -29,33 +30,38 @@ class CheckInModuleImpl implements CheckInModule {
         // The code is derived even outside the check-in window: it is worthless until the window opens,
         // because the attendance write refuses it, and an Officer setting up the room early should see
         // the screen they are about to project rather than an empty one.
-        return eventModule.findDoorEventForOfficer(eventId, callerOfficerClubIds).map(this::doorCodeFor);
+        Instant now = clock.instant();
+        return eventModule
+                .findDoorEventForOfficer(eventId, callerOfficerClubIds)
+                .map(event -> doorCodeFor(event, now));
     }
 
-    private DoorCode doorCodeFor(DoorEvent event) {
+    // One `now`, read once and passed as a value, as the technical baseline requires: two reads can
+    // straddle a window boundary and publish a rotatesAt belonging to a different code than the one
+    // displayed beside it.
+    private DoorCode doorCodeFor(DoorEvent event, Instant now) {
         return new DoorCode(
                 event.id(),
                 event.title(),
-                codec.issue(event.id(), clock.instant()),
-                codec.rotatesAt(clock.instant()),
+                codec.issue(event.id(), now),
+                codec.rotatesAt(now),
                 event.checkInOpensAt(),
                 event.checkInClosesAt(),
-                event.checkInOpen(),
-                event.capacity(),
-                event.enrolledCount(),
-                event.attendedCount());
+                event.checkInOpen());
     }
 
     @Override
     public ScanResult checkIn(String eventId, String token, String studentId) {
         Verification verification = codec.verify(token, clock.instant());
+        // Which door the code is for is settled before whether it is fresh, and deliberately so: a code
+        // signed for another Event proves presence in that room, not this one, and telling its holder to
+        // "scan again" would send them back to a screen this door will never accept. Wrong door beats
+        // stale, so the two are never confused.
+        if (verification.status() == TokenStatus.INVALID || !eventId.equals(verification.eventId())) {
+            return ScanResult.refused(ScanOutcome.TOKEN_INVALID);
+        }
         if (verification.status() == TokenStatus.EXPIRED) {
             return ScanResult.refused(ScanOutcome.TOKEN_EXPIRED);
-        }
-        // A code signed for another Event verifies, and still must not check anyone in here: presence is
-        // proven for the room that screen is in, not for whichever Event the scanner happened to open.
-        if (verification.status() != TokenStatus.VALID || !eventId.equals(verification.eventId())) {
-            return ScanResult.refused(ScanOutcome.TOKEN_INVALID);
         }
         return map(eventModule.recordScannedAttendance(eventId, studentId));
     }
