@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
 import type { EventRegistrationView } from "../types";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { MyEventsPage } from "./MyEventsPage";
 
 function axiosResponse<T>(data: T) {
@@ -152,5 +153,17 @@ describe("MyEventsPage", () => {
       expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
     });
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  // A list of Seats a Student holds, read on a phone between other things.
+  it("has no accessibility violations once the Student's Events have loaded", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({ items: [view({})], page: 0, size: 20, total: 1 }),
+    );
+
+    const { container } = renderPage();
+
+    await screen.findByText("Robotics Night");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

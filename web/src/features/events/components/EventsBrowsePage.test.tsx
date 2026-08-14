@@ -8,6 +8,7 @@ import { ApiError } from "../../../lib/apiError";
 import type { CurrentActor } from "../../../lib/auth";
 import { httpClient } from "../../../lib/httpClient";
 import type { EventBrowseItem } from "../types";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { EventsBrowsePage } from "./EventsBrowsePage";
 
 function axiosResponse<T>(data: T) {
@@ -258,5 +259,18 @@ describe("EventsBrowsePage", () => {
       expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
     });
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  // The page a Student lands on, on a phone, and the one every other student surface is reached
+  // through.
+  it("has no accessibility violations once the Events have loaded", async () => {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({ items: [item({})], page: 0, size: 20, total: 1 }),
+    );
+
+    const { container } = renderPage();
+
+    await screen.findByText("Robotics Night");
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

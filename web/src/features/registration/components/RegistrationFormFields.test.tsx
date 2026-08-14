@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RegistrationForm } from "../../../types/registrationForm";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { RegistrationFormFields } from "./RegistrationFormFields";
 import { validateRegistrationAnswers } from "../validateRegistrationAnswers";
 
@@ -163,5 +164,51 @@ describe("RegistrationFormFields", () => {
       topics: "Choose only available options.",
       teamSize: "Enter a number.",
     });
+  });
+
+  // A form read one control at a time — which is how a screen reader reads it — has to carry the help
+  // text and the refusal on the control itself. Sitting underneath is a layout fact, not a relationship.
+  it("ties each field's help text and validation message to the control they belong to", () => {
+    const { container } = render(
+      <RegistrationFormFields
+        form={form}
+        answers={{}}
+        fieldErrors={{ idea: "Too long." }}
+        onAnswer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: /project idea/i })).toHaveAccessibleDescription(
+      "Tell us what you want to build Too long.",
+    );
+    expect(screen.getByRole("radiogroup", { name: /experience/i })).toHaveAccessibleDescription(
+      "Choose one",
+    );
+    expect(container.querySelector("[aria-invalid=\"true\"]")).not.toBeNull();
+  });
+
+  it("marks a required field required rather than only printing an asterisk beside it", () => {
+    render(<RegistrationFormFields form={form} answers={{}} onAnswer={vi.fn()} />);
+
+    expect(screen.getByRole("textbox", { name: /team name/i })).toBeRequired();
+    expect(screen.getByRole("spinbutton", { name: /team size/i })).toBeRequired();
+    expect(screen.getByRole("radiogroup", { name: /experience/i })).toHaveAttribute(
+      "aria-required",
+      "true",
+    );
+    expect(screen.getByRole("textbox", { name: /project idea/i })).not.toBeRequired();
+  });
+
+  it("has no accessibility violations across all five field kinds, answered or refused", async () => {
+    const { container } = render(
+      <RegistrationFormFields
+        form={form}
+        answers={{ topics: ["AI"] }}
+        fieldErrors={{ name: "Required." }}
+        onAnswer={vi.fn()}
+      />,
+    );
+
+    expect(await accessibilityViolations(container)).toEqual([]);
   });
 });

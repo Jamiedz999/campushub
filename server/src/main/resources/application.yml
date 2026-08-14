@@ -9,11 +9,28 @@ spring:
   session:
     store-type: mongodb
 
-# server.servlet.session.cookie.secure is left unset deliberately: Boot's default mirrors the
-# scheme of the current request, so the cookie is Secure whenever TLS is actually terminated in
-# front of the app and plain over local HTTP (compose, dev, this test suite) — hardcoding true here
-# would break every local and CI environment, since none of them terminate TLS. TLS itself is an
-# environment input the release Issue supplies (see TECHNICAL-BASELINE.md), not a Core decision.
+# The session cookie's attributes, stated rather than inherited. Spring Session writes this cookie,
+# not the servlet container, and Boot configures its serialiser from exactly these properties — so
+# the defaults being right today is not the same as them being decided.
+#
+# secure is left unset deliberately: Boot's default mirrors the scheme of the current request, so the
+# cookie is Secure whenever TLS is actually terminated in front of the app and plain over local HTTP
+# (compose, dev, this test suite) — hardcoding true here would break every local and CI environment,
+# since none of them terminate TLS. TLS itself is an environment input the release Issue supplies
+# (see TECHNICAL-BASELINE.md), not a Core decision.
+#
+# SameSite is Lax rather than Strict. Lax already withholds the cookie from a cross-site POST, which
+# is the CSRF case that matters and which is defended twice over here anyway, by the double-submit
+# token. What Strict would add is refusing the cookie on inbound navigations — and the one navigation
+# this app depends on is a Student arriving at the scan page from their phone's camera app, which
+# browsers handle inconsistently enough that Strict risks signing them out at the door in exchange for
+# protection the CSRF token is already providing.
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
 
 campushub:
   zone: Europe/Dublin
@@ -24,6 +41,21 @@ campushub:
     session-secret: ${SESSION_SECRET:}
   checkin:
     hmac-secret: ${CHECKIN_HMAC_SECRET:}
+
+logging:
+  level:
+    # Spring writes the request and response body into a log line at DEBUG — "Read [...]" and
+    # "Writing [...]" — which for this application means a Student's display name and their form
+    # answers, the two things the privacy boundary exists to keep inside the owning Club. Redaction
+    # cannot help: a name has no shape to match on and an answer is arbitrary text.
+    #
+    # So these two are pinned at INFO, and turning DEBUG on for org.springframework.web to chase a
+    # routing problem no longer publishes payloads as a side effect. It is a floor, not a ceiling:
+    # naming this package explicitly still overrides it, which is the deliberate act it should be.
+    #
+    # RedactedLoggingIntegrationTest runs a full journey at DEBUG and greps for exactly these, so
+    # this line has a test rather than a comment holding it in place.
+    org.springframework.web.servlet.mvc.method.annotation: INFO
 
 mongock:
   migration-scan-package:

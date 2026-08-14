@@ -24,7 +24,11 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
+      // Four exclusions, justified alongside the backend's in
+      // docs/planning/implementation/EVIDENCE.md. Nothing else is excluded: if the gate blocks, the
+      // tests are missing.
       exclude: [
+        // Vitest's own defaults — config files, dist/, coverage/, type declarations and the tests.
         ...coverageConfigDefaults.exclude,
         // Thin entry point with no branching logic of its own.
         "src/main.tsx",

@@ -57,7 +57,7 @@ export function SignInPage() {
           />
         </label>
         {login.isError && (
-          <p role="alert" className="text-red-600">
+          <p role="alert" className="text-red-700">
             {errorMessage(login.error.code)}
           </p>
         )}

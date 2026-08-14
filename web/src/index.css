@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/*
+  The door screen's own palette and type scale.
+
+  This screen is not read on a phone at arm's length. It is projected onto a wall in a room with the
+  lights up, and a Student twelve metres away has to be able to tell whether their scan landed. So its
+  colours and its sizes are a correctness property here rather than a matter of taste, and they are
+  declared once, in one place, so that a test can hold them to a number:
+  features/checkin/doorScreenLegibility.test.ts reads these very declarations and fails the build if a
+  text pair drops below WCAG AAA (7:1) or a size drops below what carries across a room.
+
+  Everything else in the application uses Tailwind's own palette. These tokens exist because one screen
+  has a requirement the rest of the application does not.
+*/
+@theme {
+  --color-door-surface: #ffffff;
+  --color-door-ink: #0b1220;
+  --color-door-muted: #475569;
+  --color-door-good: #14532d;
+  --color-door-warn: #7f1d1d;
+
+  /* Borders and rules, which carry no text and are held to the 3:1 non-text bar instead. */
+  --color-door-line: #64748b;
+
+  --text-door-count: 7rem;
+  --text-door-title: 2.5rem;
+  --text-door-body: 1.5rem;
+  --text-door-caption: 1.25rem;
+}

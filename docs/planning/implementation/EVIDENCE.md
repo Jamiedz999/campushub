@@ -10,6 +10,8 @@ The project rests on two claims: **the contended writes are atomic**, and **a Cl
 
 This document is where the evidence for both is collected and where the mapping from claim to test is written down. It is not a second copy of the tests — the tests are the evidence. It exists because the tests are deliberately scattered: each one lives beside the module it covers, so no directory listing shows the set, and without a written mapping "every matrix row has a negative test" would be an assertion nobody could check.
 
+Three later claims have the same shape and are kept in [`HARDENING.md`](HARDENING.md) beside this one: no Student identifier reaches a log line, no form answer reaches a DTO outside the owning Club, and the coverage gate is not being met by looking away.
+
 ## The concurrency suite
 
 Four claims, gathered by the JUnit tag `@Tag("concurrency")` rather than by a directory, because [the document-ownership rule](../../adr/17-define-code-structure-and-its-enforcement.md) wants each test beside the module that owns the write. All four run real parallel callers against Testcontainers MongoDB. None of them uses a mock, because a mock cannot fail the way a lost update fails.

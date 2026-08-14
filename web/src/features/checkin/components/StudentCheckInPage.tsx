@@ -32,7 +32,11 @@ export function StudentCheckInPage() {
   }, [eventId, token, mutate]);
 
   if (eventId === undefined) {
-    return <p role="alert">No Event was specified.</p>;
+    return (
+      <Screen headline="Check in" tone="bad">
+        <p role="alert">No Event was specified.</p>
+      </Screen>
+    );
   }
 
   if (token === null) {
@@ -117,9 +121,9 @@ function Refusal({ error, onRetry, onRescan }: RefusalProps) {
 }
 
 const TONES = {
-  good: "border-emerald-500 text-emerald-800",
-  bad: "border-rose-500 text-rose-800",
-  neutral: "border-slate-300 text-slate-800",
+  good: "border-emerald-600 text-emerald-800",
+  bad: "border-rose-600 text-rose-800",
+  neutral: "border-slate-400 text-slate-800",
 };
 
 interface ScreenProps {
@@ -128,10 +132,18 @@ interface ScreenProps {
   children: ReactNode;
 }
 
+/**
+ * Every state of this page is one screen with one headline, and the headline is the page's `h1`
+ * rather than a styled paragraph — it is the only thing that says which of the outcomes this is, so
+ * it is what a Student arriving with a screen reader should land on. The tone is a border colour
+ * agreeing with words that already say the same thing; nothing here is carried by colour alone.
+ */
 function Screen({ headline, tone, children }: ScreenProps) {
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-4 p-6">
-      <p className={`w-fit rounded-full border px-3 py-1 text-sm ${TONES[tone]}`}>{headline}</p>
+      <h1 className={`w-fit rounded-full border px-3 py-1 text-base font-medium ${TONES[tone]}`}>
+        {headline}
+      </h1>
       {children}
     </main>
   );
