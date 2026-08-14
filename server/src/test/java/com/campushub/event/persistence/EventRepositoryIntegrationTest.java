@@ -2,6 +2,8 @@ package com.campushub.event.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campushub.event.EventModule.RegistrationForm;
+import com.campushub.event.EventModule.ShortTextField;
 import com.campushub.event.domain.EnrolledEntry;
 import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
@@ -17,6 +19,8 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
@@ -53,6 +57,111 @@ class EventRepositoryIntegrationTest {
         assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(event.getEnrolled()).isEmpty();
         assertThat(event.getWaitlist()).isEmpty();
+    }
+
+    @Test
+    void anOfficerUpdatesAnUnlockedRegistrationFormWithoutLosingFieldOrder() {
+        String id = repository.insertDraft(draft("club-a"));
+        RegistrationForm form = new RegistrationForm(List.of(
+                new ShortTextField("name", "Preferred name", null, true, 80),
+                new ShortTextField("team", "Team name", "Optional", false, 120)));
+
+        boolean updated = repository.updateRegistrationForm(
+                id, Set.of("club-a"), form, OPENS.minusSeconds(1));
+
+        assertThat(updated).isTrue();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.getRegistrationForm()).isEqualTo(form);
+        assertThat(event.getRegistrationFormRevision()).isEqualTo(1);
+        assertThat(event.isRegistrationFormLocked()).isFalse();
+    }
+
+    @Test
+    void takingTheFirstSeatLocksExactlyTheFormRevisionThatWasValidated() {
+        String id = publishedEvent("club-a", 5);
+        RegistrationForm form = new RegistrationForm(List.of(
+                new ShortTextField("name", "Preferred name", null, true, 80)));
+        assertThat(repository.updateRegistrationForm(
+                        id, Set.of("club-a"), form, OPENS.minusSeconds(1)))
+                .isTrue();
+
+        boolean staleAttempt = repository
+                .takeSeatForForm(id, "student-1", OPENS, 0)
+                .isPresent();
+        Long enrollmentVersion = repository
+                .takeSeatForForm(id, "student-1", OPENS, 1)
+                .orElseThrow();
+        boolean editedAfterRegistration = repository.updateRegistrationForm(
+                id, Set.of("club-a"), RegistrationForm.empty(), OPENS.plusSeconds(1));
+
+        assertThat(staleAttempt).isFalse();
+        assertThat(editedAfterRegistration).isFalse();
+        Event event = repository.findById(id).orElseThrow();
+        assertThat(event.isRegistrationFormLocked()).isTrue();
+        assertThat(event.getRegistrationForm()).isEqualTo(form);
+        assertThat(event.getEnrolled())
+                .singleElement()
+                .extracting(EnrolledEntry::enrollmentVersion)
+                .isEqualTo(enrollmentVersion);
+    }
+
+    @Test
+    void enrollmentVersionsFollowSuccessfulSeatWritesRatherThanRequestStartOrder() {
+        String id = publishedEvent("club-a", 1);
+
+        Long firstAppliedVersion = repository
+                .takeSeatForForm(id, "student-b", OPENS, 0)
+                .orElseThrow();
+        assertThat(repository.withdrawEnrolled(id, "student-b", OPENS.plusSeconds(1)))
+                .isTrue();
+        Long laterAppliedVersion = repository
+                .takeSeatForForm(id, "student-a", OPENS.plusSeconds(2), 0)
+                .orElseThrow();
+
+        assertThat(laterAppliedVersion).isGreaterThan(firstAppliedVersion);
+        assertThat(repository.findById(id).orElseThrow().getEnrolled())
+                .singleElement()
+                .satisfies(entry -> {
+                    assertThat(entry.studentId()).isEqualTo("student-a");
+                    assertThat(entry.enrollmentVersion()).isEqualTo(laterAppliedVersion);
+                });
+    }
+
+    @Test
+    void initializesLegacyEventsSoRevisionZeroCanRegisterAndExistingSeatsLockTheForm() {
+        String emptyId = publishedEvent("club-a", 5);
+        String enrolledId = publishedEvent("club-a", 5);
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("id").is(emptyId)),
+                new Update()
+                        .unset("registrationForm")
+                        .unset("registrationFormRevision")
+                        .unset("registrationFormLocked")
+                        .unset("lastEnrollmentVersion"),
+                Event.class);
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("id").is(enrolledId)),
+                new Update()
+                        .set("enrolled", List.of(new EnrolledEntry("student-1", EnrollmentVia.DIRECT, OPENS)))
+                        .unset("registrationForm")
+                        .unset("registrationFormRevision")
+                        .unset("registrationFormLocked"),
+                Event.class);
+
+        repository.initializeRegistrationForms();
+
+        Document empty = mongoTemplate.getCollection("events")
+                .find(new Document("_id", new ObjectId(emptyId)))
+                .first();
+        Document enrolled = mongoTemplate.getCollection("events")
+                .find(new Document("_id", new ObjectId(enrolledId)))
+                .first();
+        assertThat(empty).isNotNull();
+        assertThat(empty.get("registrationFormRevision")).isEqualTo(0);
+        assertThat(empty.get("registrationFormLocked")).isEqualTo(false);
+        assertThat(repository.takeSeatForForm(emptyId, "student-2", OPENS, 0)).contains(1L);
+        assertThat(enrolled).isNotNull();
+        assertThat(enrolled.get("registrationFormLocked")).isEqualTo(true);
     }
 
     @Test

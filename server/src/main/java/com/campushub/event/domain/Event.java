@@ -1,5 +1,6 @@
 package com.campushub.event.domain;
 
+import com.campushub.event.EventModule.RegistrationForm;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +44,14 @@ public class Event {
 
     private int everQueuedCount;
 
+    private long lastEnrollmentVersion;
+
+    private RegistrationForm registrationForm;
+
+    private int registrationFormRevision;
+
+    private boolean registrationFormLocked;
+
     public Event() {}
 
     public Event(
@@ -67,6 +76,10 @@ public class Event {
         this.waitlist = new ArrayList<>();
         this.promotedCount = 0;
         this.everQueuedCount = 0;
+        this.lastEnrollmentVersion = 0;
+        this.registrationForm = RegistrationForm.empty();
+        this.registrationFormRevision = 0;
+        this.registrationFormLocked = false;
     }
 
     // Package-private: lets domain tests build an Event in any stored state directly, without a Mongo
@@ -96,6 +109,7 @@ public class Event {
         this.capacity = capacity;
         this.enrolled = new ArrayList<>(enrolled);
         this.waitlist = new ArrayList<>(waitlist);
+        this.registrationForm = RegistrationForm.empty();
     }
 
     public String getId() {
@@ -152,6 +166,22 @@ public class Event {
 
     public int getPromotedCount() {
         return promotedCount;
+    }
+
+    public long getLastEnrollmentVersion() {
+        return lastEnrollmentVersion;
+    }
+
+    public RegistrationForm getRegistrationForm() {
+        return registrationForm == null ? RegistrationForm.empty() : registrationForm;
+    }
+
+    public int getRegistrationFormRevision() {
+        return registrationFormRevision;
+    }
+
+    public boolean isRegistrationFormLocked() {
+        return registrationFormLocked || !enrolled.isEmpty();
     }
 
     /** Waitlist joins are the fixed denominator; leaving the Waitlist never makes demand disappear. */

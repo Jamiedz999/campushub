@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.campushub.shared.ConflictException;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.EventNotEditableException;
+import com.campushub.shared.FormValidationException;
 import com.campushub.shared.NotFoundException;
 import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
@@ -88,5 +90,20 @@ class GlobalExceptionHandlerTest {
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getInstance()).isEqualTo(java.net.URI.create("/api/events"));
         assertThat(problem.getProperties()).containsEntry("code", ErrorCode.VALIDATION_FAILED);
+    }
+
+    @Test
+    void formValidationCarriesItsStableCodeAndPerFieldBreakdown() {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/events/abc/registration");
+        FormValidationException exception = new FormValidationException(
+                ErrorCode.UNDEFINED_OPTION, Map.of("shirt", "The option 'XL' is not defined."));
+
+        ProblemDetail problem = handler.handleFormValidation(exception, request);
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getProperties())
+                .containsEntry("code", ErrorCode.UNDEFINED_OPTION)
+                .containsEntry("fieldErrors", Map.of("shirt", "The option 'XL' is not defined."));
     }
 }

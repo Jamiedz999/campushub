@@ -3,6 +3,7 @@ package com.campushub.shared.web;
 import com.campushub.shared.ConflictException;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.EventNotEditableException;
+import com.campushub.shared.FormValidationException;
 import com.campushub.shared.NotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -22,6 +23,17 @@ class GlobalExceptionHandler {
         problem.setTitle("Validation Failed");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", ErrorCode.VALIDATION_FAILED);
+        return problem;
+    }
+
+    @ExceptionHandler(FormValidationException.class)
+    ProblemDetail handleFormValidation(FormValidationException exception, HttpServletRequest request) {
+        ProblemDetail problem =
+                ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+        problem.setTitle("Form Validation Failed");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("code", exception.code());
+        problem.setProperty("fieldErrors", exception.fieldErrors());
         return problem;
     }
 

@@ -2,6 +2,8 @@ package com.campushub.identityaccess.persistence;
 
 import com.campushub.identityaccess.domain.Account;
 import java.util.Optional;
+import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
@@ -34,6 +36,13 @@ public class AccountRepository {
 
     public Optional<Account> findById(String id) {
         return Optional.ofNullable(mongoTemplate.findById(id, Account.class));
+    }
+
+    public List<Account> findByIds(Set<String> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return mongoTemplate.find(Query.query(Criteria.where("id").in(ids)), Account.class);
     }
 
     /**

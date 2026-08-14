@@ -1,14 +1,22 @@
 package com.campushub.event.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campushub.event.EventModule.WithdrawalOutcome;
+import com.campushub.event.EventModule.SeatRequestOutcome;
+import com.campushub.event.EventModule.SeatRequestResult;
+import com.campushub.event.EventModule.FormUpdateOutcome;
+import com.campushub.event.EventModule.NumberField;
+import com.campushub.event.EventModule.RegistrationForm;
+import com.campushub.event.EventModule.ShortTextField;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
@@ -18,6 +26,9 @@ import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
+import com.campushub.shared.ErrorCode;
+import com.campushub.shared.FormValidationException;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -98,6 +109,62 @@ class EventModuleImplTest {
     }
 
     @Test
+    void updateRegistrationFormReturnsSuccessWhenTheGuardedWriteMatches() {
+        RegistrationForm form = new RegistrationForm(
+                List.of(new ShortTextField("507f1f77bcf86cd799439011", "Preferred name", "", true, 80)));
+        when(repository.updateRegistrationForm("event-1", CLUB_IDS, form, NOW)).thenReturn(true);
+
+        assertThat(module.updateRegistrationForm("event-1", CLUB_IDS, form))
+                .isEqualTo(FormUpdateOutcome.SUCCESS);
+    }
+
+    @Test
+    void updateRegistrationFormClassifiesALockedEvent() {
+        RegistrationForm form = RegistrationForm.empty();
+        Event event = mock(Event.class);
+        when(repository.updateRegistrationForm("event-1", CLUB_IDS, form, NOW)).thenReturn(false);
+        when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
+        when(event.isRegistrationFormLocked()).thenReturn(true);
+
+        assertThat(module.updateRegistrationForm("event-1", CLUB_IDS, form))
+                .isEqualTo(FormUpdateOutcome.FORM_LOCKED);
+    }
+
+    @Test
+    void updateRegistrationFormClassifiesMissingAndLifecycleFailures() {
+        RegistrationForm form = RegistrationForm.empty();
+        when(repository.updateRegistrationForm("missing", CLUB_IDS, form, NOW)).thenReturn(false);
+        when(repository.findScopedById("missing", CLUB_IDS)).thenReturn(Optional.empty());
+        Event event = mock(Event.class);
+        when(repository.updateRegistrationForm("started", CLUB_IDS, form, NOW)).thenReturn(false);
+        when(repository.findScopedById("started", CLUB_IDS)).thenReturn(Optional.of(event));
+
+        assertThat(module.updateRegistrationForm("missing", CLUB_IDS, form))
+                .isEqualTo(FormUpdateOutcome.NOT_FOUND);
+        assertThat(module.updateRegistrationForm("started", CLUB_IDS, form))
+                .isEqualTo(FormUpdateOutcome.NOT_EDITABLE);
+    }
+
+    @Test
+    void updateRegistrationFormRejectsInvalidDefinitionsBeforeWriting() {
+        RegistrationForm form = new RegistrationForm(List.of(
+                new ShortTextField("507f1f77bcf86cd799439011", "", "", true, 0),
+                new NumberField(
+                        "507f1f77bcf86cd799439011",
+                        "Team size",
+                        "",
+                        false,
+                        BigDecimal.TEN,
+                        BigDecimal.ONE)));
+
+        assertThatThrownBy(() -> module.updateRegistrationForm("event-1", CLUB_IDS, form))
+                .isInstanceOf(FormValidationException.class)
+                .extracting(exception -> ((FormValidationException) exception).code())
+                .isEqualTo(ErrorCode.FORM_VALIDATION_FAILED);
+        verify(repository, never()).updateRegistrationForm(any(), any(), any(), any());
+    }
+
+    @Test
     void publishReturnsSuccessWhenTheGuardedWriteMatches() {
         when(repository.publish("event-1", CLUB_IDS)).thenReturn(true);
 
@@ -165,6 +232,15 @@ class EventModuleImplTest {
         EventBrowseQuery query = new EventBrowseQuery("robot", null, null, null, null, null, null, 0, 20);
         EventPage page = new EventPage(List.of(), 0, 20, 0);
         when(repository.browse(eq(query), eq(EventSort.RELEVANCE), eq(NOW))).thenReturn(page);
+
+        assertThat(module.browse(query)).isEqualTo(page);
+    }
+
+    @Test
+    void browseTreatsABlankSearchTermAsNoSearch() {
+        EventBrowseQuery query = new EventBrowseQuery(" ", null, null, null, null, null, null, 0, 20);
+        EventPage page = new EventPage(List.of(), 0, 20, 0);
+        when(repository.browse(eq(query), eq(EventSort.STARTS_AT_ASC), eq(NOW))).thenReturn(page);
 
         assertThat(module.browse(query)).isEqualTo(page);
     }
@@ -262,6 +338,40 @@ class EventModuleImplTest {
         // RegistrationOutcomeTest's job; this only proves the module delegates to it rather than
         // inventing its own classification.
         assertThat(module.register("event-1", "student-1")).isEqualTo(RegistrationOutcome.EVENT_CANCELLED);
+    }
+
+    @Test
+    void requestSeatMakesAStaleFormRevisionRetryBeforeJoiningTheWaitlist() {
+        Event changed = eventWithStatus(EventStatus.PUBLISHED);
+        when(changed.getRegistrationFormRevision()).thenReturn(2);
+        when(repository.takeSeatForForm("event-1", "student-1", NOW, 1))
+                .thenReturn(Optional.empty());
+        when(repository.findById("event-1")).thenReturn(Optional.of(changed));
+
+        assertThat(module.requestSeat("event-1", "student-1", 1))
+                .isEqualTo(new SeatRequestResult(SeatRequestOutcome.FORM_CHANGED, null));
+        verify(repository, never()).joinWaitlist("event-1", "student-1", NOW);
+    }
+
+    @Test
+    void requestSeatWinsAgainstTheExactFormRevisionAlreadyValidated() {
+        when(repository.takeSeatForForm("event-1", "student-1", NOW, 3))
+                .thenReturn(Optional.of(42L));
+
+        assertThat(module.requestSeat("event-1", "student-1", 3))
+                .isEqualTo(new SeatRequestResult(SeatRequestOutcome.SUCCESS, 42L));
+    }
+
+    @Test
+    void requestSeatHidesAMissingOrDraftEvent() {
+        Event draft = eventWithStatus(EventStatus.DRAFT);
+        when(repository.findById("missing")).thenReturn(Optional.empty());
+        when(repository.findById("draft")).thenReturn(Optional.of(draft));
+
+        assertThat(module.requestSeat("missing", "student-1", 0))
+                .isEqualTo(new SeatRequestResult(SeatRequestOutcome.NOT_FOUND, null));
+        assertThat(module.requestSeat("draft", "student-1", 0))
+                .isEqualTo(new SeatRequestResult(SeatRequestOutcome.NOT_FOUND, null));
     }
 
     @Test

@@ -19,6 +19,9 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolled: false,
     enrollmentVia: null,
     waitlistPosition: null,
+    registrationForm: { fields: [] },
+    answersSaved: null,
+    answers: {},
     ...overrides,
   };
 }

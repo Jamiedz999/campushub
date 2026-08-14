@@ -1,5 +1,6 @@
 package com.campushub.event.web;
 
+import com.campushub.event.EventModule.RegistrationForm;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.domain.Phase;
@@ -25,7 +26,9 @@ record EventOfficerResponse(
         int waitlistCount,
         int promotedCount,
         int everQueuedCount,
-        double waitlistConversion) {
+        double waitlistConversion,
+        RegistrationForm registrationForm,
+        boolean registrationFormLocked) {
 
     static EventOfficerResponse from(Event event, Instant now) {
         return new EventOfficerResponse(
@@ -44,6 +47,8 @@ record EventOfficerResponse(
                 event.getWaitlist().size(),
                 event.getPromotedCount(),
                 event.getEverQueuedCount(),
-                event.waitlistConversion());
+                event.waitlistConversion(),
+                event.getRegistrationForm(),
+                event.isRegistrationFormLocked());
     }
 }

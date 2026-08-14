@@ -71,6 +71,7 @@ class EventRepositorySeatLedgerIntegrationTest {
         assertThat(entry.studentId()).isEqualTo("student-1");
         assertThat(entry.via()).isEqualTo(EnrollmentVia.DIRECT);
         assertThat(entry.at()).isEqualTo(WITHIN_WINDOW);
+        assertThat(entry.enrollmentVersion()).isPositive();
     }
 
     @Test
@@ -139,9 +140,12 @@ class EventRepositorySeatLedgerIntegrationTest {
 
         Event event = repository.findById(id).orElseThrow();
         assertThat(event.getWaitlist()).isEmpty();
-        assertThat(event.getEnrolled())
-                .containsExactly(new EnrolledEntry(
-                        "student-2", EnrollmentVia.PROMOTED, WITHIN_WINDOW.plusSeconds(3)));
+        assertThat(event.getEnrolled()).singleElement().satisfies(entry -> {
+            assertThat(entry.studentId()).isEqualTo("student-2");
+            assertThat(entry.via()).isEqualTo(EnrollmentVia.PROMOTED);
+            assertThat(entry.at()).isEqualTo(WITHIN_WINDOW.plusSeconds(3));
+            assertThat(entry.enrollmentVersion()).isPositive();
+        });
         assertThat(event.getEverQueuedCount()).isEqualTo(2);
         assertThat(event.getPromotedCount()).isEqualTo(1);
         assertThat(event.waitlistConversion()).isEqualTo(0.5);
@@ -169,6 +173,7 @@ class EventRepositorySeatLedgerIntegrationTest {
                 .allSatisfy(entry -> {
                     assertThat(entry.via()).isEqualTo(EnrollmentVia.PROMOTED);
                     assertThat(entry.at()).isEqualTo(WITHIN_WINDOW.plusSeconds(1));
+                    assertThat(entry.enrollmentVersion()).isPositive();
                 });
         assertThat(event.getWaitlist()).containsExactly("student-5");
         assertThat(event.getPromotedCount()).isEqualTo(2);

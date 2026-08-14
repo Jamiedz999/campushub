@@ -36,6 +36,9 @@ function view(overrides: Partial<EventRegistrationView>): EventRegistrationView 
     enrolled: false,
     enrollmentVia: null,
     waitlistPosition: null,
+    registrationForm: { fields: [] },
+    answersSaved: null,
+    answers: {},
     ...overrides,
   };
 }
@@ -83,6 +86,37 @@ describe("EventRegistrationPage", () => {
 
     await waitFor(() => expect(screen.getByText(/you.re registered/i)).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
+  });
+
+  it("shows an enrolled Student their own saved answers", async () => {
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: null,
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(
+        view({
+          enrolled: true,
+          answersSaved: true,
+          registrationForm: customForm,
+          answers: { teamName: "Circuit Breakers" },
+        }),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText("Your answers")).toBeInTheDocument();
+    expect(screen.getByLabelText("Team name *")).toHaveValue("Circuit Breakers");
+    expect(screen.getByLabelText("Team name *")).toBeDisabled();
   });
 
   it("offers the Waitlist once the Event is full", async () => {
@@ -168,7 +202,9 @@ describe("EventRegistrationPage", () => {
   it("registers on click and shows the fresh, enrolled view", async () => {
     const user = userEvent.setup();
     vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({})));
-    vi.spyOn(httpClient, "post").mockResolvedValue(axiosResponse(view({ enrolled: true, enrolledCount: 29 })));
+    const postSpy = vi
+      .spyOn(httpClient, "post")
+      .mockResolvedValue(axiosResponse(view({ enrolled: true, enrolledCount: 29, answersSaved: true })));
 
     renderPage();
     await waitFor(() => expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument());
@@ -176,6 +212,120 @@ describe("EventRegistrationPage", () => {
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     await waitFor(() => expect(screen.getByText(/you.re registered/i)).toBeInTheDocument());
+    expect(postSpy).toHaveBeenCalledWith("/events/event-1/registration", { answers: {} });
+  });
+
+  it("validates and submits a custom form before taking a Seat", async () => {
+    const user = userEvent.setup();
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: "Your public team name",
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ registrationForm: customForm })),
+    );
+    const postSpy = vi.spyOn(httpClient, "post").mockResolvedValue(
+      axiosResponse(view({ registrationForm: customForm, enrolled: true, answersSaved: true })),
+    );
+
+    renderPage();
+    expect((await screen.findByLabelText("Team name *")).closest("form")).toHaveAttribute("novalidate");
+    await user.click(await screen.findByRole("button", { name: "Register" }));
+
+    expect(await screen.findByText("Required.")).toBeInTheDocument();
+    expect(postSpy).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText("Team name *"), "Circuit Breakers");
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    await waitFor(() =>
+      expect(postSpy).toHaveBeenCalledWith("/events/event-1/registration", {
+        answers: { teamName: "Circuit Breakers" },
+      }),
+    );
+  });
+
+  it("keeps answers visible when a full-Event race puts the Student on the Waitlist", async () => {
+    const user = userEvent.setup();
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: "",
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ registrationForm: customForm })));
+    vi.spyOn(httpClient, "post").mockResolvedValue(
+      axiosResponse(
+        view({
+          phase: "FULL",
+          waitlistPosition: 1,
+          registrationForm: customForm,
+          answersSaved: null,
+        }),
+      ),
+    );
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Team name *"), "Circuit Breakers");
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    expect(await screen.findByText("You’re number 1 on the Waitlist.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Team name *")).toHaveValue("Circuit Breakers");
+  });
+
+  it("makes a failed answer write explicit and retries answers without touching the Seat", async () => {
+    const user = userEvent.setup();
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: "",
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ registrationForm: customForm })));
+    vi.spyOn(httpClient, "post").mockResolvedValue(
+      axiosResponse(
+        view({ registrationForm: customForm, enrolled: true, answersSaved: false, enrolledCount: 29 }),
+      ),
+    );
+    const putSpy = vi.spyOn(httpClient, "put").mockResolvedValue(
+      axiosResponse(view({ registrationForm: customForm, enrolled: true, answersSaved: true })),
+    );
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Team name *"), "Circuit Breakers");
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    expect(await screen.findByText(/seat is safe.*answers were not saved/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Team name *")).toHaveValue("Circuit Breakers");
+    expect(screen.getByLabelText("Team name *").closest("form")).toHaveAttribute("novalidate");
+    await user.click(screen.getByRole("button", { name: "Retry saving answers" }));
+
+    await waitFor(() =>
+      expect(putSpy).toHaveBeenCalledWith("/events/event-1/registration/answers", {
+        answers: { teamName: "Circuit Breakers" },
+      }),
+    );
+    expect(await screen.findByText(/you.re registered/i)).toBeInTheDocument();
   });
 
   it("shows the matching message when the registration attempt is refused", async () => {
@@ -193,5 +343,88 @@ describe("EventRegistrationPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("This Event is full.");
     });
+  });
+
+  it("shows server-side field errors beside the refreshed custom form", async () => {
+    const user = userEvent.setup();
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: "",
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(axiosResponse(view({ registrationForm: customForm })));
+    vi.spyOn(httpClient, "post").mockRejectedValue(
+      new ApiError({
+        code: "FORM_VALIDATION_FAILED",
+        status: 400,
+        title: "Form Validation Failed",
+        detail: "invalid",
+        fieldErrors: { teamName: "The form changed; check this answer." },
+      }),
+    );
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Team name *"), "Robots");
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    expect(await screen.findByText("The form changed; check this answer.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Team name *")).toHaveValue("Robots");
+  });
+
+  it("uses the custom-form Waitlist action and shows a retry transport failure", async () => {
+    const user = userEvent.setup();
+    const customForm = {
+      fields: [
+        {
+          type: "SHORT_TEXT" as const,
+          fieldId: "teamName",
+          label: "Team name",
+          helpText: "",
+          required: true,
+          maxLength: 20,
+        },
+      ],
+    };
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(
+        view({ phase: "FULL", registrationForm: customForm, enrolled: true, answersSaved: false }),
+      ),
+    );
+    vi.spyOn(httpClient, "put").mockRejectedValue(
+      new ApiError({ code: "INTERNAL_ERROR", status: 500, title: "Error", detail: "boom" }),
+    );
+
+    renderPage();
+    await user.type(await screen.findByLabelText("Team name *"), "Robots");
+    await user.click(screen.getByRole("button", { name: "Retry saving answers" }));
+
+    expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
+  });
+
+  it("shows in-flight wording for both withdrawal routes", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ enrolled: true, enrollmentVia: "DIRECT", answersSaved: true })),
+    );
+    vi.spyOn(httpClient, "delete").mockReturnValue(new Promise(() => {}));
+
+    const enrolledPage = renderPage();
+    await user.click(await screen.findByRole("button", { name: "Withdraw from Event" }));
+    expect(screen.getByRole("button", { name: "Withdrawing…" })).toBeDisabled();
+    enrolledPage.unmount();
+
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse(view({ phase: "FULL", waitlistPosition: 2 })),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Leave the Waitlist" }));
+    expect(screen.getByRole("button", { name: "Leaving…" })).toBeDisabled();
   });
 });

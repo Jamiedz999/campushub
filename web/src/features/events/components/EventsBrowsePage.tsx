@@ -121,12 +121,26 @@ export function EventsBrowsePage() {
                   <p className="text-sm text-slate-600">{item.description}</p>
                   <p className="text-sm">{describePhase(item)}</p>
                   {currentActor.data?.officerClubIds.includes(item.clubId) && (
-                    <Link
-                      to={`/officer/events/${item.id}/capacity`}
-                      className="text-sm font-medium text-slate-700 hover:underline"
-                    >
-                      Manage capacity
-                    </Link>
+                    <div className="flex flex-wrap gap-3">
+                      <Link
+                        to={`/officer/events/${item.id}/capacity`}
+                        className="text-sm font-medium text-slate-700 hover:underline"
+                      >
+                        Manage capacity
+                      </Link>
+                      <Link
+                        to={`/officer/events/${item.id}/registration-form`}
+                        className="text-sm font-medium text-slate-700 hover:underline"
+                      >
+                        Build registration form
+                      </Link>
+                      <Link
+                        to={`/officer/events/${item.id}/registration-answers`}
+                        className="text-sm font-medium text-slate-700 hover:underline"
+                      >
+                        View registration answers
+                      </Link>
+                    </div>
                   )}
                 </li>
               ))}

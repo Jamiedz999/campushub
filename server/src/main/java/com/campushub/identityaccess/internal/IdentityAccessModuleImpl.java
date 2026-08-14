@@ -8,6 +8,9 @@ import com.campushub.identityaccess.persistence.AccountRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 class IdentityAccessModuleImpl implements IdentityAccessModule {
@@ -38,5 +41,11 @@ class IdentityAccessModuleImpl implements IdentityAccessModule {
                 account.getDisplayName(),
                 account.getSystemRole(),
                 clubModule.officerClubIdsFor(accountId));
+    }
+
+    @Override
+    public Map<String, String> displayNames(Set<String> accountIds) {
+        return accountRepository.findByIds(accountIds).stream()
+                .collect(Collectors.toUnmodifiableMap(Account::getId, Account::getDisplayName));
     }
 }
