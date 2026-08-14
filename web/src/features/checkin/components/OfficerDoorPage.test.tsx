@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AxiosHeaders } from "axios";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
+import { DoorSocketDouble } from "../__doorSocketDouble";
 import { OfficerDoorPage } from "./OfficerDoorPage";
 
 const DOOR_CODE = {
@@ -26,6 +27,15 @@ const ROSTER = {
     { studentId: "student-2", displayName: "S. Kaur", at: "2026-03-20T18:09:00Z", method: "MANUAL" },
     { studentId: "student-3", displayName: "T. Adeyemi", at: null, method: null },
   ],
+};
+
+// The same Roster after the last Seat holder has scanned in — what a re-read returns once three
+// people are in the room rather than two.
+const SEATS_ALL_TAKEN = {
+  ...ROSTER,
+  items: ROSTER.items.map((entry) =>
+    entry.at === null ? { ...entry, at: "2026-03-20T18:11:00Z", method: "SCANNED" } : entry,
+  ),
 };
 
 function axiosResponse<T>(data: T) {
@@ -66,7 +76,13 @@ function renderPage() {
 }
 
 describe("OfficerDoorPage", () => {
+  beforeEach(() => {
+    DoorSocketDouble.reset();
+    vi.stubGlobal("WebSocket", DoorSocketDouble);
+  });
+
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -82,8 +98,8 @@ describe("OfficerDoorPage", () => {
     expect(container.querySelectorAll("path").length).toBeGreaterThan(0);
   });
 
-  // Derived from the Roster the override already reads, not sent by the door-code endpoint: pushing
-  // attendance out as it happens is Issue #9, and polling for it here would pre-empt that decision.
+  // Derived from the Roster rather than from anything the socket or the door-code endpoint said. The
+  // socket only ever says "re-read"; every number on this screen comes from the snapshot that follows.
   it("derives the count from the Roster rather than reading one off the code", async () => {
     mockReads();
 
@@ -201,5 +217,62 @@ describe("OfficerDoorPage", () => {
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not open the door screen (NOT_FOUND)");
+  });
+
+  it("counts up without a reload when a Student scans", async () => {
+    const get = mockReads();
+
+    renderPage();
+
+    const doorCode = await screen.findByRole("region", { name: "Door code" });
+    expect(within(doorCode).getByText("2")).toBeInTheDocument();
+
+    act(() => DoorSocketDouble.current().connect());
+    get.mockImplementation((url: string) =>
+      url === "/events/event-1/door-code"
+        ? Promise.resolve(axiosResponse(DOOR_CODE))
+        : Promise.resolve(axiosResponse(SEATS_ALL_TAKEN)),
+    );
+    act(() => DoorSocketDouble.current().deliver('{"type":"attendance-changed","eventId":"event-1"}'));
+
+    expect(await within(doorCode).findByText("3")).toBeInTheDocument();
+  });
+
+  // The acceptance criterion in Issue #9: a missed message or a dropped connection never leaves the
+  // screen wrong. Three people walk in while the projector's wifi is out and no hint reaches this
+  // screen at all — reconnecting re-reads, so the number is right without anyone touching it.
+  it("shows the right number after a dropped connection that missed every hint", async () => {
+    const get = mockReads();
+
+    renderPage();
+
+    const doorCode = await screen.findByRole("region", { name: "Door code" });
+    act(() => DoorSocketDouble.current().connect());
+    expect(await within(doorCode).findByText("2")).toBeInTheDocument();
+
+    act(() => DoorSocketDouble.current().drop());
+    get.mockImplementation((url: string) =>
+      url === "/events/event-1/door-code"
+        ? Promise.resolve(axiosResponse(DOOR_CODE))
+        : Promise.resolve(axiosResponse(SEATS_ALL_TAKEN)),
+    );
+
+    await waitFor(() => expect(DoorSocketDouble.opened).toHaveLength(2), { timeout: 3_000 });
+    act(() => DoorSocketDouble.current().connect());
+
+    expect(await within(doorCode).findByText("3")).toBeInTheDocument();
+  });
+
+  it("says whether it is counting live or falling back to re-reading", async () => {
+    mockReads();
+
+    renderPage();
+
+    const live = await screen.findByLabelText("Live count");
+    expect(live).toHaveTextContent("Not connected");
+
+    act(() => DoorSocketDouble.current().connect());
+
+    await waitFor(() => expect(live).toHaveTextContent("Counting live as people scan."));
   });
 });

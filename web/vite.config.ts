@@ -10,6 +10,12 @@ export default defineConfig({
         target: "http://localhost:8080",
         changeOrigin: true,
       },
+      // The door screen's socket. Same origin in production, so it needs proxying only here, where the
+      // dev server and the backend are two ports.
+      "/ws": {
+        target: "ws://localhost:8080",
+        ws: true,
+      },
     },
   },
   test: {
@@ -25,6 +31,10 @@ export default defineConfig({
         // Test fixtures for the ESLint boundary rule (see featureBoundary.test.ts),
         // not application code — exercising them would prove nothing.
         "**/__boundaryFixture.ts",
+        // A stand-in for the browser's WebSocket, used only by tests. Under the same
+        // `__` marker as the fixture above: it ships in no bundle, and counting a
+        // test double towards the gate would measure the tests testing themselves.
+        "**/__doorSocketDouble.ts",
       ],
       thresholds: {
         lines: 90,

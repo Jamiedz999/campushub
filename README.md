@@ -87,6 +87,17 @@ that proves it rather than just asserting it.
   `EventRepositoryAttendanceIntegrationTest.nParallelScansByOneStudentProduceExactlyOneAttendanceRecord`
   (`server/src/test/java/com/campushub/event/persistence/EventRepositoryAttendanceIntegrationTest.java:201`).
 
+- **The live attendee count is pushed as a hint, never as a number.** The door screen's WebSocket
+  carries one message — "something changed in this Event's scope" — and the screen answers it by
+  re-reading an authorized snapshot over HTTP, which it also does on every reconnect. So a lost frame
+  or a dropped connection costs latency and never correctness, and there is no delivery guarantee to
+  build. Subscription is authorized once, at the handshake, where the connection is still an HTTP
+  request with a session behind it. See
+  [the check-in ADR](docs/adr/07-define-qr-checkin-and-anti-fraud.md) and the test that drops a
+  screen, lets it miss three hints and proves the server owes it no backlog:
+  `DoorScopeSocketIntegrationTest.aReconnectedScreenIsOwedNoBacklogOfWhatItMissed`
+  (`server/src/test/java/com/campushub/realtime/internal/DoorScopeSocketIntegrationTest.java:153`).
+
 - **Phase is derived, so it can never contradict its own timestamps.** Only Status (Draft, Published,
   Cancelled) is stored; every other reading — Scheduled, Registration Open, Full, Registration
   Closed, In Progress, Completed — is computed on read from Status, four timestamps and the Seat

@@ -25,10 +25,9 @@ public interface CheckInModule {
      * The code the Officer's door screen displays, and the window it will be judged against. The whole
      * room scans the same code in the same window.
      *
-     * <p>It carries no attendance count. How many people are in the room is a Seat Ledger reading, it
-     * arrives with the Roster the manual override already reads, and pushing it out live is
-     * <a href="https://github.com/Jamiedz999/campushub/issues/9">its own Issue</a> — polling it here
-     * would be that deferred decision made by accident.
+     * <p>It carries no attendance count, and still does not now that the count is live. How many
+     * people are in the room is a Seat Ledger reading that arrives with the Roster the manual override
+     * already reads; the socket only says when to read it again. See {@code com.campushub.realtime}.
      */
     record DoorCode(
             String eventId,

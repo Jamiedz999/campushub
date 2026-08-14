@@ -18,7 +18,7 @@ import type { RosterEntry } from "../types";
 export function OfficerDoorPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const doorCode = useDoorCode(eventId ?? "");
-  const roster = useAttendanceRoster(eventId ?? "");
+  const { roster, live } = useAttendanceRoster(eventId ?? "");
   const override = useMarkPresent(eventId ?? "");
 
   if (eventId === undefined) {
@@ -63,6 +63,13 @@ export function OfficerDoorPage() {
           </p>
           <p className="text-sm text-slate-500">
             checked in{progress.manual > 0 && ` · ${progress.manual} marked by hand`}
+          </p>
+          {/* Said out loud rather than left to be inferred from a number that has stopped moving: a
+              screen that is a few seconds behind looks exactly like a quiet door. */}
+          <p className="text-sm text-slate-500" role="status" aria-label="Live count">
+            {live
+              ? "Counting live as people scan."
+              : "Not connected — counting by re-reading every few seconds."}
           </p>
           <p className="text-sm text-slate-500">
             Students scan the code themselves. It rotates at {formatCampusTime(code.rotatesAt)} and the

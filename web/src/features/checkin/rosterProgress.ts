@@ -5,8 +5,8 @@ import type { RosterEntry } from "./types";
  *
  * Derived from the Roster rather than read from the server, for the same reason Phase is derived
  * rather than stored — two numbers that can disagree with the list beside them are two numbers that
- * eventually will. It also keeps this Issue clear of the live attendee count, which is
- * [its own Issue](https://github.com/Jamiedz999/campushub/issues/9).
+ * eventually will. That holds all the more now the count is live: the socket says only that the
+ * Roster moved, so these numbers still come from the list they are printed beside.
  */
 export interface RosterProgress {
   enrolled: number;
