@@ -186,6 +186,46 @@ class EventOfficerAccessIntegrationTest {
         assertThat(cancelled.statusCode()).isEqualTo(204);
     }
 
+    // "cancel only" is a boundary, not a summary: the cancellation route above lets a University Admin
+    // clear a room, and every other route on the same Event refuses them, because authoring and running
+    // an Event is the Club's business. See docs/adr/08-define-roles-and-resource-authorization.md.
+    @Test
+    void aUniversityAdminCannotCreateEditPublishOrReadAnEventTheyMayCancel() throws Exception {
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId).body());
+
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+
+        assertNotFound(admin.createDraft(clubAId));
+        assertNotFound(admin.get("/events/" + eventId));
+        assertNotFound(admin.patch("/events/" + eventId, "{\"title\":\"Admin edit\",\"capacity\":10}"));
+        assertNotFound(admin.put("/events/" + eventId + "/registration-form", "{\"fields\":[]}"));
+        assertNotFound(admin.post("/events/" + eventId + "/publication", ""));
+        assertThat(officerA.get("/events/" + eventId).body()).contains("\"status\":\"DRAFT\"");
+    }
+
+    // A Club Officer's own routes still refuse a Student who holds no grant anywhere.
+    @Test
+    void aStudentWithNoGrantsCannotReadEditOrPublishADraft() throws Exception {
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId).body());
+
+        Session student = Session.signIn(port, studentEmail, PASSWORD);
+
+        assertNotFound(student.get("/events/" + eventId));
+        assertNotFound(student.patch("/events/" + eventId, "{\"title\":\"Student edit\",\"capacity\":10}"));
+        assertNotFound(student.put("/events/" + eventId + "/registration-form", "{\"fields\":[]}"));
+        assertNotFound(student.post("/events/" + eventId + "/publication", ""));
+        assertNotFound(student.post("/events/" + eventId + "/cancellation", ""));
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+    }
+
     private static String extractId(String body) {
         int start = body.indexOf("\"id\":\"") + 6;
         int end = body.indexOf('"', start);
@@ -245,6 +285,14 @@ class EventOfficerAccessIntegrationTest {
         HttpResponse<String> patch(String path, String jsonBody) throws Exception {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
                     .method("PATCH", BodyPublishers.ofString(jsonBody))
+                    .header("Content-Type", "application/json");
+            csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        }
+
+        HttpResponse<String> put(String path, String jsonBody) throws Exception {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
+                    .PUT(BodyPublishers.ofString(jsonBody))
                     .header("Content-Type", "application/json");
             csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
             return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());

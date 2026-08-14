@@ -67,6 +67,7 @@ class EventRegistrationAccessIntegrationTest {
     private String otherOfficerEmail;
     private String studentAEmail;
     private String studentBEmail;
+    private String adminEmail;
 
     @BeforeEach
     void setUp() {
@@ -78,6 +79,7 @@ class EventRegistrationAccessIntegrationTest {
         otherOfficerEmail = "other-officer-" + suffix + "@event-registration-access-test.campushub";
         studentAEmail = "student-a-" + suffix + "@event-registration-access-test.campushub";
         studentBEmail = "student-b-" + suffix + "@event-registration-access-test.campushub";
+        adminEmail = "admin-" + suffix + "@event-registration-access-test.campushub";
 
         String hash = passwordEncoder.encode(PASSWORD);
         Account officer = accountRepository.insert(new Account(officerEmail, hash, "Officer", SystemRole.STUDENT));
@@ -87,6 +89,7 @@ class EventRegistrationAccessIntegrationTest {
         clubModule.grantOfficer(otherClubId, otherOfficer.getId());
         accountRepository.insert(new Account(studentAEmail, hash, "Student A", SystemRole.STUDENT));
         accountRepository.insert(new Account(studentBEmail, hash, "Student B", SystemRole.STUDENT));
+        accountRepository.insert(new Account(adminEmail, hash, "Campus Admin", SystemRole.UNIVERSITY_ADMIN));
     }
 
     @Test
@@ -256,6 +259,38 @@ class EventRegistrationAccessIntegrationTest {
         assertNotFound(formEdit);
         assertNotFound(answers);
         assertNotFound(csv);
+    }
+
+    // The privacy boundary from the other two directions, which the cross-club test cannot show: form
+    // answers belong to the owning Club's Officers, so a Student — including the one who wrote the
+    // answers — and a University Admin, whose legitimate interest is aggregate, are both refused. See
+    // docs/adr/08-define-roles-and-resource-authorization.md.
+    @Test
+    void neitherAStudentNorAUniversityAdminMayReadTheFormAnswers() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = extractId(officer.createDraft(clubId, 5).body());
+        officer.put(
+                "/events/" + eventId + "/registration-form",
+                "{\"fields\":[{\"type\":\"SINGLE_CHOICE\",\"fieldId\":\"" + SHIRT_FIELD_ID
+                        + "\",\"label\":\"T-shirt\",\"helpText\":null,\"required\":true,"
+                        + "\"options\":[\"S\",\"M\",\"L\"]}]}");
+        officer.post("/events/" + eventId + "/publication", "");
+        Session author = Session.signIn(port, studentAEmail, PASSWORD);
+        author.post(
+                "/events/" + eventId + "/registration",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"M\"}}");
+
+        Session otherStudent = Session.signIn(port, studentBEmail, PASSWORD);
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+
+        assertNotFound(author.get("/events/" + eventId + "/registration-answers"));
+        assertNotFound(otherStudent.get("/events/" + eventId + "/registration-answers"));
+        assertNotFound(otherStudent.get("/events/" + eventId + "/registration-answers/csv"));
+        assertNotFound(admin.get("/events/" + eventId + "/registration-answers"));
+        assertNotFound(admin.get("/events/" + eventId + "/registration-answers/csv"));
+        // The owning Officer still reads them: the refusals above are a boundary, not a broken route.
+        assertThat(officer.get("/events/" + eventId + "/registration-answers").statusCode())
+                .isEqualTo(200);
     }
 
     private String publishEvent(Session officer, int capacity) throws Exception {

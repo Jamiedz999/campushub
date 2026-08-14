@@ -69,6 +69,7 @@ class CheckInAccessIntegrationTest {
     private String otherOfficerEmail;
     private String studentAEmail;
     private String studentBEmail;
+    private String adminEmail;
 
     @BeforeEach
     void setUp() {
@@ -79,6 +80,7 @@ class CheckInAccessIntegrationTest {
         otherOfficerEmail = "other-officer-" + suffix + "@checkin-access-test.campushub";
         studentAEmail = "student-a-" + suffix + "@checkin-access-test.campushub";
         studentBEmail = "student-b-" + suffix + "@checkin-access-test.campushub";
+        adminEmail = "admin-" + suffix + "@checkin-access-test.campushub";
 
         String hash = passwordEncoder.encode(PASSWORD);
         Account officer = accountRepository.insert(new Account(officerEmail, hash, "Officer", SystemRole.STUDENT));
@@ -88,6 +90,7 @@ class CheckInAccessIntegrationTest {
         clubModule.grantOfficer(otherClubId, otherOfficer.getId());
         accountRepository.insert(new Account(studentAEmail, hash, "Student A", SystemRole.STUDENT));
         accountRepository.insert(new Account(studentBEmail, hash, "Student B", SystemRole.STUDENT));
+        accountRepository.insert(new Account(adminEmail, hash, "Campus Admin", SystemRole.UNIVERSITY_ADMIN));
     }
 
     @Test
@@ -229,6 +232,32 @@ class CheckInAccessIntegrationTest {
 
         assertThat(refused.statusCode()).isEqualTo(404);
         assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"method\":null");
+    }
+
+    // The University Admin row of the permission matrix, which no positive test can show: running the
+    // door and overriding attendance are the Club's business, and campus-wide authority is not a way in.
+    // See docs/adr/08-define-roles-and-resource-authorization.md.
+    @Test
+    void aUniversityAdminCannotRunTheDoorReadTheRosterOrOverrideAttendance() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = openEvent(officer, 5);
+        Session student = Session.signIn(port, studentAEmail, PASSWORD);
+        student.post("/events/" + eventId + "/registration", "");
+        String studentId = studentIdOf(officer.get("/events/" + eventId + "/attendance").body(), null);
+
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+
+        assertNotFound(admin.get("/events/" + eventId + "/door-code"));
+        assertNotFound(admin.get("/events/" + eventId + "/attendance"));
+        assertNotFound(admin.put("/events/" + eventId + "/attendance/" + studentId, ""));
+        assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"method\":null");
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
     }
 
     // An Event whose check-in window is already open and whose registration has not closed.

@@ -177,6 +177,37 @@ class VenueAccessIntegrationTest {
                 + "\"endsAt\":\"2099-03-20T11:00:00Z\"}";
     }
 
+    // The Venue Slot row of the permission matrix, standing on its own rather than as three assertions
+    // inside the Officer's happy path: a Slot is booked against an Event, so the Event's Club is what
+    // decides, and an Officer of another Club is refused exactly as a Student is. See
+    // docs/adr/08-define-roles-and-resource-authorization.md.
+    @Test
+    void neitherAnOfficerOfAnotherClubNorAStudentCanBookOrReleaseAnEventsSlot() throws Exception {
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+        String venueId = extractId(admin.post("/venues", "{\"name\":\"Cross-club Hall\"}").body());
+        Session officerA = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officerA.createDraft(clubAId, "Club A's Event").body());
+
+        Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
+        Session student = Session.signIn(port, studentEmail, PASSWORD);
+
+        assertNotFound(officerB.put("/events/" + eventId + "/slot", slot(venueId)));
+        assertNotFound(officerB.delete("/events/" + eventId + "/slot"));
+        assertNotFound(student.put("/events/" + eventId + "/slot", slot(venueId)));
+        assertNotFound(student.delete("/events/" + eventId + "/slot"));
+        assertNotFound(student.get("/venues/" + venueId + "/days/2099-03-20"));
+        // The owning Officer still books it, so the refusals above are a boundary, not a broken route.
+        assertThat(officerA.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
+                .isEqualTo(204);
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+    }
+
     private static String extractId(String body) {
         int start = body.indexOf("\"id\":\"") + 6;
         int end = body.indexOf('"', start);

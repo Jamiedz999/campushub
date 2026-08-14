@@ -64,6 +64,7 @@ class ClubOfficerAccessIntegrationTest {
     private String officerEmail;
     private String officerAccountId;
     private String studentEmail;
+    private String studentAccountId;
 
     @BeforeEach
     void setUp() {
@@ -79,7 +80,8 @@ class ClubOfficerAccessIntegrationTest {
         accountRepository.insert(new Account(adminEmail, hash, "Test Admin", SystemRole.UNIVERSITY_ADMIN));
         Account officer = accountRepository.insert(new Account(officerEmail, hash, "Test Officer", SystemRole.STUDENT));
         officerAccountId = officer.getId();
-        accountRepository.insert(new Account(studentEmail, hash, "Test Student", SystemRole.STUDENT));
+        Account student = accountRepository.insert(new Account(studentEmail, hash, "Test Student", SystemRole.STUDENT));
+        studentAccountId = student.getId();
     }
 
     @Test
@@ -150,6 +152,30 @@ class ClubOfficerAccessIntegrationTest {
         HttpResponse<String> response = student.grantOfficer(clubAId, officerAccountId);
 
         assertThat(response.statusCode()).isEqualTo(404);
+    }
+
+    // Granting is a University Admin responsibility, and holding the grant is not a way to hand it on:
+    // an Officer of Club A can neither grant nor revoke in their own Club nor in anyone else's. Without
+    // this, "granting officer rights" is an Admin-only rule shown only by an Admin succeeding at it.
+    @Test
+    void anOfficerCannotGrantOrRevokeOfficerRightsEvenInTheirOwnClub() throws Exception {
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+        admin.grantOfficer(clubAId, officerAccountId);
+
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+
+        assertNotFound(officer.grantOfficer(clubAId, studentAccountId));
+        assertNotFound(officer.grantOfficer(clubBId, studentAccountId));
+        assertNotFound(officer.delete("/clubs/" + clubAId + "/officers/" + officerAccountId));
+        // The grant the Admin made is untouched, so none of the three refusals wrote anything.
+        assertThat(officer.get("/clubs/" + clubAId + "/officers").body()).contains(officerAccountId);
+    }
+
+    // 404 carrying NOT_FOUND, never 403: a refusal that admits the resource exists is the leak the
+    // scoped-query rule exists to prevent.
+    private static void assertNotFound(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
     }
 
     /** A same-origin, cookie-carrying HTTP session signed in as one account — mirrors a real browser tab. */
