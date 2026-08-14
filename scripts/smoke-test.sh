@@ -16,7 +16,9 @@
 
 set -euo pipefail
 
-BASE_URL="${1:-${SMOKE_BASE_URL:-}}"
+BASE_URL="${1:-}"
+# The credentials have an environment form as well as a positional one because CI passes them from a
+# repository variable and a secret, and a password on a command line is a password in a process list.
 EMAIL="${2:-${SMOKE_EMAIL:-student@demo.campushub}}"
 PASSWORD="${3:-${SMOKE_PASSWORD:-123456}}"
 

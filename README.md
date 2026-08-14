@@ -65,10 +65,18 @@ missing one fails to boot rather than quietly running on a value that is public 
 | `SESSION_SECRET` | Signs the session cookie. `openssl rand -base64 32`. |
 | `CHECKIN_HMAC_SECRET` | Derives the rotating door code. `openssl rand -base64 32`. |
 
-`SPRING_PROFILES_ACTIVE=development` is the fourth, and it is the one to think about: it is what seeds
-the demo accounts and the demo Events above. A deployment that sets it is publishing a demo, which is
+`SPRING_PROFILES_ACTIVE=demo` is the fourth, and it is the one to think about: it is what seeds the
+demo accounts and the demo Events above. A deployment that sets it is publishing a demo, which is
 exactly what a portfolio deployment is for — but it is an explicit act, and the seed can never reach a
 real database by accident.
+
+**`demo` rather than `development`, and the difference is the point.** Both seed the same data, but
+`development` also carries the one developer convenience in this repository: a built-in fallback for
+`CHECKIN_HMAC_SECRET`, so a fresh clone runs without generating one. A deployment running under
+`development` would therefore be signing its door codes with a key printed in this README's repository.
+Under `demo` that secret is required like every other, and the application refuses to start without it —
+`SecretsStartupIntegrationTest.refusesToStartWithoutTheCheckInHmacSecretInTheDemoProfile` is what holds
+that line.
 
 Then check the deployment rather than trusting it:
 

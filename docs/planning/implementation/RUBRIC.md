@@ -17,12 +17,36 @@ The point of the exercise is the divergence, not the total. Two items diverged, 
 yet closed, and both are recorded below in the terms an interviewer would ask about rather than in the
 terms that flatter the number.
 
+## Core Acceptance, bullet by bullet
+
+The release Issue's first acceptance line is "All Core Acceptance bullets pass", and that is a different
+list from the rubric below — it is this project's own, from [the Sprint plan](../13-set-core-boundary-and-sprints.md#core-acceptance).
+Checked here rather than assumed, because a bullet nobody reads out loud is a bullet that quietly stops
+being true.
+
+Measured on 2026-08-15, from a clean checkout of this branch.
+
+| Bullet | Holds | How it was checked |
+|---|---|---|
+| `./server/mvnw verify` green, JaCoCo ≥ 90% line and branch | ✅ | Green. 98% line, 92% branch on the merged unit + integration exec |
+| `npm --prefix web run check` green, Vitest ≥ 90% | ✅ | Green. 98.29% lines, 92.48% branches |
+| Checkstyle, SpotBugs and ESLint fail the build, all in CI | ✅ | All three in `mvnw verify` / `npm run check`, both run by the `build` job |
+| Testcontainers integration tests covering every REST endpoint | ✅ | Route-by-route mapping in [`HARDENING.md`](HARDENING.md#the-endpoint-coverage-sweep) |
+| Concurrency tests over all four contended writes | ✅ | The four claims, and the guard-removal record proving each is load-bearing, in [`EVIDENCE.md`](EVIDENCE.md#the-concurrency-suite) |
+| A negative authorization test for every row of the permission matrix | ✅ | Row-by-row mapping in [`EVIDENCE.md`](EVIDENCE.md) |
+| Cypress in CI over the three journeys | ✅ | The `cypress-journeys` job, which runs the set **twice against the same stack** |
+| Deployed at a public URL, reachable, with seeded demo data | ❌ | **The one open bullet.** No host chosen; see the divergence below |
+| README with the positioning line, three screenshots, an architecture diagram, and a working `docker compose up` | ✅ | Delivered at [#16](https://github.com/Jamiedz999/campushub/issues/16); the compose path is re-run by CI on every build |
+| Every ADR link in the repository resolves | ✅ | The `docs-link-check` job, with `--include-fragments`, over the README, `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md` and all of `docs/` |
+
+Nine of ten. The tenth is the deployment, and it is the same item the rubric's gate is missing.
+
 ## The gate
 
 | Item | Predicted | Achieved | Evidence |
 |---|---|---|---|
-| Backend tests with JaCoCo ≥ 90% | ✅ | ✅ **98% line, 92% branch** | `./mvnw verify` fails below 90% on both counters, against the merged unit + integration exec |
-| Frontend tests, Vitest ≥ 90% | ✅ | ✅ **98.3% statements, 92.5% branches** | `npm --prefix web run check` |
+| Backend tests with JaCoCo ≥ 90% | ✅ | ✅ **98% line (2460/2508), 92% branch (588/639)** | `./mvnw verify` on 2026-08-15; it fails below 90% on both counters, against the merged unit + integration exec |
+| Frontend tests, Vitest ≥ 90% | ✅ | ✅ **98.29% lines (749/762), 92.48% branches (615/665)** | `npm --prefix web run check` on 2026-08-15 |
 | Integration tests over the REST API with Testcontainers | ✅ | ✅ | Every endpoint, mapped route by route in [`HARDENING.md`](HARDENING.md#the-endpoint-coverage-sweep) |
 | Checkstyle + SpotBugs + ESLint, failing the build | ✅ | ✅ | All three run in CI; SpotBugs at `Max` effort |
 | Swagger / OpenAPI via springdoc | ✅ | ✅ | `springdoc-openapi-starter-webmvc-ui`; `/swagger-ui/index.html` and `/v3/api-docs` answer on a running instance |
@@ -53,8 +77,9 @@ code is closed; the one that depends on an account, a card and a hostname is not
 been chosen. This was foreseen — the plan split the milestones precisely so that [v0.1](../13-set-core-boundary-and-sprints.md#sprints)
 made the repository CV-ready without a URL — but foreseeing it is not the same as having done it, and
 the honest current score is 6.5 + 5 rather than 7.5 + 7. What exists in place of the deployment is
-everything that does not need the host: the image, the profile-gated seed, three secrets with no
-production defaults, and [`scripts/smoke-test.sh`](../../../scripts/smoke-test.sh), which CI already
+everything that does not need the host: the image, the profile-gated seed, a `demo` profile that seeds
+that data while requiring every secret the way production does, and
+[`scripts/smoke-test.sh`](../../../scripts/smoke-test.sh), which CI already
 runs against the composed stack on every build and will run against the public URL the moment the
 repository variable `PUBLIC_BASE_URL` is set.
 

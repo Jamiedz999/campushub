@@ -59,7 +59,7 @@ class SeedingIntegrationTest {
         try {
             MongoTemplate mongoTemplate = context.getBean(MongoTemplate.class);
 
-            assertThat(mongoTemplate.findAll(Club.class)).hasSizeGreaterThanOrEqualTo(3);
+            assertThat(mongoTemplate.findAll(Club.class)).hasSize(4);
             List<Account> accounts = mongoTemplate.findAll(Account.class);
             assertThat(accounts)
                     .extracting(Account::getEmail)
@@ -113,6 +113,25 @@ class SeedingIntegrationTest {
             assertThat(mongoTemplate.findAll(VenueDay.class))
                     .flatExtracting(VenueDay::getBookings)
                     .hasSizeGreaterThanOrEqualTo(2);
+        } finally {
+            context.close();
+        }
+    }
+
+    // The profile a public deployment actually runs, and the reason it exists: it seeds exactly what
+    // "development" seeds, and it carries none of the developer conveniences that profile also carries —
+    // the check-in HMAC fallback among them, which SecretsStartupIntegrationTest holds to the same line.
+    @Test
+    void theDemoProfileSeedsTheSameDataAsTheDevelopmentProfile() {
+        ConfigurableApplicationContext context = boot("seeding-test-demo-profile", "demo");
+        try {
+            MongoTemplate mongoTemplate = context.getBean(MongoTemplate.class);
+
+            assertThat(mongoTemplate.findAll(Club.class)).hasSize(4);
+            assertThat(mongoTemplate.findAll(Account.class))
+                    .extracting(Account::getEmail)
+                    .contains("admin@demo.campushub", "officer@demo.campushub", "student@demo.campushub");
+            assertThat(mongoTemplate.findAll(Event.class)).isNotEmpty();
         } finally {
             context.close();
         }
