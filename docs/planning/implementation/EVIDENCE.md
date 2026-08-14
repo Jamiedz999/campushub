@@ -10,7 +10,7 @@ The project rests on two claims: **the contended writes are atomic**, and **a Cl
 
 This document is where the evidence for both is collected and where the mapping from claim to test is written down. It is not a second copy of the tests — the tests are the evidence. It exists because the tests are deliberately scattered: each one lives beside the module it covers, so no directory listing shows the set, and without a written mapping "every matrix row has a negative test" would be an assertion nobody could check.
 
-Three later claims have the same shape and are kept in [`HARDENING.md`](HARDENING.md) beside this one: no Student identifier reaches a log line, no form answer reaches a DTO outside the owning Club, and the coverage gate is not being met by looking away.
+Four later claims have the same shape and are kept in [`HARDENING.md`](HARDENING.md) beside this one: no Student identifier reaches a log line, no form answer reaches a DTO outside the owning Club, the coverage gate is not being met by looking away, and [every REST endpoint has an integration test](HARDENING.md#the-endpoint-coverage-sweep) — that last one being the mapping this table does for authorization, done for the routing table.
 
 ## The concurrency suite
 
@@ -86,7 +86,7 @@ Where the tests live:
 | Test class | Rows it holds |
 |---|---|
 | `event.web.EventOfficerAccessIntegrationTest` | Event authoring and cancellation |
-| `event.web.EventRegistrationAccessIntegrationTest` | registration, the Draft boundary, forms and answers |
+| `event.web.EventRegistrationAccessIntegrationTest` | registration, the Draft boundary in both discovery and the Event, forms and answers |
 | `checkin.web.CheckInAccessIntegrationTest` | the door, the Roster and manual overrides |
 | `venue.web.VenueAccessIntegrationTest` | Venue records and Event Slots |
 | `identityaccess.web.ClubOfficerAccessIntegrationTest` | grants, revocation and the officer list |

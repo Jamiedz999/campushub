@@ -38,6 +38,9 @@ class EventRegistrationAccessIntegrationTest {
     private static final String PASSWORD = "correct-horse-battery-staple";
     private static final String SHIRT_FIELD_ID = "507f1f77bcf86cd799439011";
     private static final String TOPICS_FIELD_ID = "507f1f77bcf86cd799439012";
+    private static final String SHIRT_FORM = "{\"fields\":[{\"type\":\"SINGLE_CHOICE\",\"fieldId\":\""
+            + SHIRT_FIELD_ID + "\",\"label\":\"T-shirt\",\"helpText\":null,\"required\":true,"
+            + "\"options\":[\"S\",\"M\",\"L\"]}]}";
 
     @Container
     static final MongoDBContainer MONGO_DB = new MongoDBContainer("mongo:8");
@@ -193,6 +196,41 @@ class EventRegistrationAccessIntegrationTest {
         assertNotFound(attempt);
     }
 
+    // The third way a Student could reach a Draft, after the registration view and the registration
+    // write above: discovery. EventRepositoryBrowseIntegrationTest already proves the filters and the
+    // ordering against real Mongo, so this asserts only what a query below the HTTP layer cannot — that
+    // clubId and size reach the query rather than being dropped, that Published-only survives the whole
+    // stack, and that the Student's item carries Phase rather than Status. Filtering by clubId is what
+    // makes the single expected item exact, so every other assertion here is about that one Event —
+    // this class shares one database across its tests. See docs/adr/16-define-event-discovery.md.
+    @Test
+    void discoveryBindsItsQueryParametersAndNeverCarriesADraft() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String publishedId = publishEvent(officer, 5);
+        String draftId = extractId(officer.createDraft(clubId, 5).body());
+
+        Session studentA = Session.signIn(port, studentAEmail, PASSWORD);
+        HttpResponse<String> discovered = studentA.get(
+                "/events?clubId=" + clubId + "&openForRegistration=true&sort=STARTS_AT_ASC&size=50");
+        HttpResponse<String> otherClub = studentA.get("/events?clubId=" + otherClubId);
+
+        assertThat(discovered.statusCode()).isEqualTo(200);
+        assertThat(discovered.body())
+                .contains(publishedId)
+                // One item, so the Phase below is that Event's and not some neighbour's, and `size`
+                // echoed back at 50 rather than the controller's default of 20 is the parameter binding.
+                .contains("\"total\":1")
+                .contains("\"size\":50")
+                .contains("\"phase\":\"REGISTRATION_OPEN\"")
+                .doesNotContain(draftId);
+        // The control for that absence: the Draft exists and its own Officer reads it by id. Without
+        // this, a read that returned nothing at all — a mis-bound clubId, say — would pass.
+        assertThat(officer.get("/events/" + draftId).body()).contains("\"status\":\"DRAFT\"");
+        // And the control for clubId binding in the other direction: the same read scoped to a Club
+        // that owns none of these Events comes back empty rather than ignoring the parameter.
+        assertThat(otherClub.body()).contains("\"total\":0").doesNotContain(publishedId);
+    }
+
     @Test
     void anOfficerBuildsAFormAStudentAnswersItAndTheSameColumnsReachCsv() throws Exception {
         Session officer = Session.signIn(port, officerEmail, PASSWORD);
@@ -243,6 +281,91 @@ class EventRegistrationAccessIntegrationTest {
         assertThat(locked.body()).contains("\"code\":\"FORM_LOCKED\"");
     }
 
+    // The retry route exists for the one outcome the Seat Ledger write cannot make atomic with the
+    // answer write: the Seat is held but the answers were lost. The Student's browser offers it at
+    // web/src/features/registration/components/EventRegistrationPage.tsx when answersSaved is false.
+    // A real HTTP test cannot induce that half-failure, and does not need to — the route's contract is
+    // "replace my saved answers, leave my Seat alone", which registering and then retrying exercises
+    // end to end. Otherwise it is covered only against mocks, by
+    // RegistrationModuleImplTest.retryWritesOnlyTheMissingAnswersWithoutTouchingTheSeat.
+    @Test
+    void aStudentRetriesTheirAnswersAndTheCorrectionReachesTheOfficerReport() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = publishEventWithShirtForm(officer, 5);
+        Session student = Session.signIn(port, studentAEmail, PASSWORD);
+        student.post(
+                "/events/" + eventId + "/registration",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"M\"}}");
+        HttpResponse<String> beforeRetry = officer.get("/events/" + eventId + "/registration-answers");
+
+        HttpResponse<String> retried = student.put(
+                "/events/" + eventId + "/registration/answers",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"L\"}}");
+        HttpResponse<String> reread = student.get("/events/" + eventId + "/registration");
+        HttpResponse<String> afterRetry = officer.get("/events/" + eventId + "/registration-answers");
+
+        assertThat(retried.statusCode()).isEqualTo(200);
+        assertThat(retried.body())
+                .contains("\"answersSaved\":true")
+                .contains("\"" + SHIRT_FIELD_ID + "\":\"L\"");
+        // Read back in a separate request, because the response above is built from the map the Student
+        // just submitted and would look identical if nothing had reached Mongo. The same read proves the
+        // Seat was untouched: retrying answers is not a re-registration.
+        assertThat(reread.body())
+                .contains("\"" + SHIRT_FIELD_ID + "\":\"L\"")
+                .contains("\"enrolled\":true")
+                .contains("\"enrollmentVia\":\"DIRECT\"")
+                .contains("\"enrolledCount\":1");
+        // The retry replaces the Student's one Registration rather than adding a second: the earlier "M"
+        // has to be gone afterwards, and the before-shot is the control that it was ever counted.
+        assertThat(beforeRetry.body())
+                .contains("\"fieldId\":\"" + SHIRT_FIELD_ID + "\",\"option\":\"M\",\"count\":1");
+        assertThat(afterRetry.body())
+                .contains("\"fieldId\":\"" + SHIRT_FIELD_ID + "\",\"option\":\"L\",\"count\":1")
+                .doesNotContain("\"option\":\"M\",\"count\":1");
+    }
+
+    // Both ways the retry route refuses, each against a control that shows the refusal is specific:
+    // invalid answers leave the previously saved ones standing, and holding a Waitlist place is not
+    // holding a Seat even though the Event itself is perfectly visible to that Student.
+    @Test
+    void aRetryIsRefusedForInvalidAnswersAndForAWaitlistedStudentWhoHoldsNoSeat() throws Exception {
+        Session officer = Session.signIn(port, officerEmail, PASSWORD);
+        String eventId = publishEventWithShirtForm(officer, 1);
+        Session seatHolder = Session.signIn(port, studentAEmail, PASSWORD);
+        Session waitlisted = Session.signIn(port, studentBEmail, PASSWORD);
+        seatHolder.post(
+                "/events/" + eventId + "/registration",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"M\"}}");
+        waitlisted.post(
+                "/events/" + eventId + "/registration",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"S\"}}");
+
+        HttpResponse<String> invalid = seatHolder.put(
+                "/events/" + eventId + "/registration/answers", "{\"answers\":{}}");
+        HttpResponse<String> afterInvalid = seatHolder.get("/events/" + eventId + "/registration");
+        HttpResponse<String> withoutASeat = waitlisted.put(
+                "/events/" + eventId + "/registration/answers",
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"S\"}}");
+        HttpResponse<String> waitlistedView = waitlisted.get("/events/" + eventId + "/registration");
+
+        assertThat(invalid.statusCode()).isEqualTo(400);
+        assertThat(invalid.body())
+                .contains("\"code\":\"FORM_VALIDATION_FAILED\"")
+                .contains("\"" + SHIRT_FIELD_ID + "\":\"Required.\"");
+        // A rejected retry is not a destructive one — the answers written at registration survive it.
+        assertThat(afterInvalid.body())
+                .contains("\"answersSaved\":true")
+                .contains("\"" + SHIRT_FIELD_ID + "\":\"M\"");
+        assertNotFound(withoutASeat);
+        // The control for that 404: this Student can read the Event's registration state perfectly well,
+        // so the refusal is about the missing Seat and not about the Event being hidden from them.
+        assertThat(waitlistedView.statusCode()).isEqualTo(200);
+        assertThat(waitlistedView.body())
+                .contains("\"enrolled\":false")
+                .contains("\"waitlistPosition\":1");
+    }
+
     @Test
     void anOfficerCannotBuildOrReadRegistrationFormsForAnotherClub() throws Exception {
         Session otherOfficer = Session.signIn(port, otherOfficerEmail, PASSWORD);
@@ -268,13 +391,7 @@ class EventRegistrationAccessIntegrationTest {
     @Test
     void neitherAStudentNorAUniversityAdminMayReadTheFormAnswers() throws Exception {
         Session officer = Session.signIn(port, officerEmail, PASSWORD);
-        String eventId = extractId(officer.createDraft(clubId, 5).body());
-        officer.put(
-                "/events/" + eventId + "/registration-form",
-                "{\"fields\":[{\"type\":\"SINGLE_CHOICE\",\"fieldId\":\"" + SHIRT_FIELD_ID
-                        + "\",\"label\":\"T-shirt\",\"helpText\":null,\"required\":true,"
-                        + "\"options\":[\"S\",\"M\",\"L\"]}]}");
-        officer.post("/events/" + eventId + "/publication", "");
+        String eventId = publishEventWithShirtForm(officer, 5);
         Session author = Session.signIn(port, studentAEmail, PASSWORD);
         author.post(
                 "/events/" + eventId + "/registration",
@@ -291,6 +408,15 @@ class EventRegistrationAccessIntegrationTest {
         // The owning Officer still reads them: the refusals above are a boundary, not a broken route.
         assertThat(officer.get("/events/" + eventId + "/registration-answers").statusCode())
                 .isEqualTo(200);
+    }
+
+    // The form has to be built while the Event is still a Draft — publishing locks it — so the three
+    // tests that need answers to exist all open with the same three calls in the same order.
+    private String publishEventWithShirtForm(Session officer, int capacity) throws Exception {
+        String eventId = extractId(officer.createDraft(clubId, capacity).body());
+        officer.put("/events/" + eventId + "/registration-form", SHIRT_FORM);
+        officer.post("/events/" + eventId + "/publication", "");
+        return eventId;
     }
 
     private String publishEvent(Session officer, int capacity) throws Exception {
