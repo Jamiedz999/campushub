@@ -98,13 +98,11 @@ class VenueAccessIntegrationTest {
         HttpResponse<String> listed = officer.get("/venues?page=0&size=100");
         assertThat(listed.statusCode()).isEqualTo(200);
         assertThat(listed.body()).contains(venueId, "Main Sports Hall");
-        assertThat(officer.post("/venues", "{\"name\":\"Not allowed\"}").statusCode())
-                .isEqualTo(404);
+        assertNotFound(officer.post("/venues", "{\"name\":\"Not allowed\"}"));
 
         Session student = Session.signIn(port, studentEmail, PASSWORD);
-        assertThat(student.get("/venues").statusCode()).isEqualTo(404);
-        assertThat(student.post("/venues", "{\"name\":\"Not allowed\"}").statusCode())
-                .isEqualTo(404);
+        assertNotFound(student.get("/venues"));
+        assertNotFound(student.post("/venues", "{\"name\":\"Not allowed\"}"));
     }
 
     @Test
@@ -121,11 +119,9 @@ class VenueAccessIntegrationTest {
         assertThat(day.body()).contains(eventId, "\"startMinute\":600", "\"endMinute\":660");
 
         Session otherOfficer = Session.signIn(port, officerBEmail, PASSWORD);
-        assertThat(otherOfficer.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
-                .isEqualTo(404);
+        assertNotFound(otherOfficer.put("/events/" + eventId + "/slot", slot(venueId)));
         Session student = Session.signIn(port, studentEmail, PASSWORD);
-        assertThat(student.get("/venues/" + venueId + "/days/2099-03-20").statusCode())
-                .isEqualTo(404);
+        assertNotFound(student.get("/venues/" + venueId + "/days/2099-03-20"));
 
         assertThat(officer.delete("/events/" + eventId + "/slot").statusCode())
                 .isEqualTo(204);
@@ -143,12 +139,10 @@ class VenueAccessIntegrationTest {
         Session officer = Session.signIn(port, officerAEmail, PASSWORD);
         String eventId = extractId(officer.createDraft(clubAId, "Officer-owned Event").body());
 
-        assertThat(admin.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
-                .isEqualTo(404);
+        assertNotFound(admin.put("/events/" + eventId + "/slot", slot(venueId)));
         assertThat(officer.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
                 .isEqualTo(204);
-        assertThat(admin.delete("/events/" + eventId + "/slot").statusCode())
-                .isEqualTo(404);
+        assertNotFound(admin.delete("/events/" + eventId + "/slot"));
         assertThat(officer.get("/events/" + eventId).body()).contains("\"venueId\":\"" + venueId + "\"");
     }
 

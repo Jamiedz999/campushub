@@ -114,8 +114,7 @@ class EventOfficerAccessIntegrationTest {
         Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
         HttpResponse<String> response = officerB.get("/events/" + eventId);
 
-        assertThat(response.statusCode()).isEqualTo(404);
-        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(response);
     }
 
     @Test
@@ -126,8 +125,7 @@ class EventOfficerAccessIntegrationTest {
         Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
         HttpResponse<String> response = officerB.patch("/events/" + eventId, "{\"title\":\"Hijacked\"}");
 
-        assertThat(response.statusCode()).isEqualTo(404);
-        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(response);
     }
 
     @Test
@@ -138,8 +136,7 @@ class EventOfficerAccessIntegrationTest {
         Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
         HttpResponse<String> response = officerB.post("/events/" + eventId + "/publication", "");
 
-        assertThat(response.statusCode()).isEqualTo(404);
-        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(response);
     }
 
     @Test
@@ -148,7 +145,7 @@ class EventOfficerAccessIntegrationTest {
 
         HttpResponse<String> response = student.createDraft(clubAId);
 
-        assertThat(response.statusCode()).isEqualTo(404);
+        assertNotFound(response);
     }
 
     @Test
@@ -171,7 +168,7 @@ class EventOfficerAccessIntegrationTest {
         Session officerB = Session.signIn(port, officerBEmail, PASSWORD);
         HttpResponse<String> response = officerB.post("/events/" + eventId + "/cancellation", "");
 
-        assertThat(response.statusCode()).isEqualTo(404);
+        assertNotFound(response);
     }
 
     @Test

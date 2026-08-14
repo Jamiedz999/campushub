@@ -101,8 +101,7 @@ class ClubOfficerAccessIntegrationTest {
 
         // Same officer session, no re-login: the revoked grant is refused on the very next request.
         HttpResponse<String> afterRevoke = officer.get("/clubs/" + clubAId + "/officers");
-        assertThat(afterRevoke.statusCode()).isEqualTo(404);
-        assertThat(afterRevoke.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(afterRevoke);
     }
 
     @Test
@@ -130,8 +129,7 @@ class ClubOfficerAccessIntegrationTest {
 
         HttpResponse<String> response = student.get("/clubs/" + clubAId + "/officers");
 
-        assertThat(response.statusCode()).isEqualTo(404);
-        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertNotFound(response);
     }
 
     @Test
@@ -142,7 +140,7 @@ class ClubOfficerAccessIntegrationTest {
         Session officer = Session.signIn(port, officerEmail, PASSWORD);
         HttpResponse<String> response = officer.get("/clubs/" + clubBId + "/officers");
 
-        assertThat(response.statusCode()).isEqualTo(404);
+        assertNotFound(response);
     }
 
     @Test
@@ -151,7 +149,7 @@ class ClubOfficerAccessIntegrationTest {
 
         HttpResponse<String> response = student.grantOfficer(clubAId, officerAccountId);
 
-        assertThat(response.statusCode()).isEqualTo(404);
+        assertNotFound(response);
     }
 
     // Granting is a University Admin responsibility, and holding the grant is not a way to hand it on:

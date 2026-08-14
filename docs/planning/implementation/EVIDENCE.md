@@ -38,11 +38,15 @@ Run on 2026-08-14, against `mongo:8` under Testcontainers, one guard removed at 
 | Guard removed | What the test reported |
 |---|---|
 | Capacity `$expr` in `takeSeat` | 40 parallel registrations against a Capacity of 10 all enrolled — `expected: 10, but was: 40` |
-| `enrolled.studentId` match in `withdrawEnrolled` | all 20 parallel withdrawals of the same Seat won, so one freed Seat promoted 20 Students — `expected: 1, but was: 20` |
+| `enrolled.studentId` match in `withdrawEnrolled` | all 20 parallel withdrawals of the same Seat reported success, where exactly one may — `expected: 1, but was: 20`. That guard is what makes the freed Seat the thing being matched, so without it the promotion arithmetic runs once per caller rather than once per Seat |
 | `attendance.studentId: $ne` in `recordAttendance` | 30 parallel scans by one Student wrote 30 attendance records — `expected: 1, but was: 30` |
 | overlap predicate in `VenueRepository.acquire` | both overlapping requests won and double-booked the room — `[ACQUIRED, ACQUIRED]` where `[ACQUIRED, SLOT_TAKEN]` was expected |
 
-This is a one-off verification, not a recurring check. Nothing in the build re-runs it, and nothing should: a mutation-testing harness for four guards is a tool to maintain in exchange for a fact that only changes if someone edits a guard. **If one of these guards is edited, this experiment is repeated and this table is updated** — that is the maintenance obligation, and it is stated here rather than left implied.
+The experiment is [`server/scripts/verify-guards-are-load-bearing.sh`](../../../server/scripts/verify-guards-are-load-bearing.sh) — it patches out one guard at a time, runs that claim's test, and restores the file from git after each. It is committed so the table above is reproducible rather than a story about something that happened once.
+
+Every run in it is *expected* to fail, which makes a broken toolchain indistinguishable from a load-bearing guard if the exit code is all you read. So the script proves the suite green before it breaks anything, and reads `Tests run: N, Failures: >0` rather than the exit status — a compile break reports **inconclusive**, not success. An experiment that cannot fail to confirm its own hypothesis is not an experiment, and this one had that bug before it had this check.
+
+It is deliberately **not** part of `mvnw verify`. The result only changes when someone edits a guard, and a mutation harness maintained in the build for four of them costs more than the fact is worth. **If one of these guards is edited, the script is run again and this table is updated** — that is the maintenance obligation, and it is stated here rather than left implied.
 
 ## The Seat Ledger freeze
 

@@ -179,10 +179,8 @@ class CheckInAccessIntegrationTest {
 
         Session otherOfficer = Session.signIn(port, otherOfficerEmail, PASSWORD);
 
-        assertThat(otherOfficer.get("/events/" + eventId + "/door-code").statusCode())
-                .isEqualTo(404);
-        assertThat(otherOfficer.get("/events/" + eventId + "/attendance").statusCode())
-                .isEqualTo(404);
+        assertNotFound(otherOfficer.get("/events/" + eventId + "/door-code"));
+        assertNotFound(otherOfficer.get("/events/" + eventId + "/attendance"));
     }
 
     @Test
@@ -192,8 +190,8 @@ class CheckInAccessIntegrationTest {
         Session student = Session.signIn(port, studentAEmail, PASSWORD);
         student.post("/events/" + eventId + "/registration", "");
 
-        assertThat(student.get("/events/" + eventId + "/door-code").statusCode()).isEqualTo(404);
-        assertThat(student.get("/events/" + eventId + "/attendance").statusCode()).isEqualTo(404);
+        assertNotFound(student.get("/events/" + eventId + "/door-code"));
+        assertNotFound(student.get("/events/" + eventId + "/attendance"));
     }
 
     @Test
@@ -230,7 +228,7 @@ class CheckInAccessIntegrationTest {
         HttpResponse<String> refused =
                 otherOfficer.put("/events/" + eventId + "/attendance/" + studentId, "");
 
-        assertThat(refused.statusCode()).isEqualTo(404);
+        assertNotFound(refused);
         assertThat(officer.get("/events/" + eventId + "/attendance").body()).contains("\"method\":null");
     }
 

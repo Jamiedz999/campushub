@@ -189,8 +189,8 @@ class EventRegistrationAccessIntegrationTest {
         HttpResponse<String> view = studentA.get("/events/" + eventId + "/registration");
         HttpResponse<String> attempt = studentA.post("/events/" + eventId + "/registration", "");
 
-        assertThat(view.statusCode()).isEqualTo(404);
-        assertThat(attempt.statusCode()).isEqualTo(404);
+        assertNotFound(view);
+        assertNotFound(attempt);
     }
 
     @Test
