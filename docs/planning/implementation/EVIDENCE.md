@@ -86,7 +86,7 @@ Where the tests live:
 | Test class | Rows it holds |
 |---|---|
 | `event.web.EventOfficerAccessIntegrationTest` | Event authoring and cancellation |
-| `event.web.EventRegistrationAccessIntegrationTest` | registration, the Draft boundary in both the catalogue and the Event, forms and answers |
+| `event.web.EventRegistrationAccessIntegrationTest` | registration, the Draft boundary in both discovery and the Event, forms and answers |
 | `checkin.web.CheckInAccessIntegrationTest` | the door, the Roster and manual overrides |
 | `venue.web.VenueAccessIntegrationTest` | Venue records and Event Slots |
 | `identityaccess.web.ClubOfficerAccessIntegrationTest` | grants, revocation and the officer list |

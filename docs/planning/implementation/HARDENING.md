@@ -99,7 +99,7 @@ cd server && grep -rn -E '@(Get|Post|Put|Delete|Patch)Mapping' src/main/java --i
 Two routes had no such test when it was run, and both looked covered from a distance:
 
 - **`PUT /api/events/{eventId}/registration/answers`** — the retry path behind "your Seat is safe, but your answers were not saved". Tested only against a mocked repository (`RegistrationModuleImplTest`) and a mocked module (`RegistrationControllerTest`).
-- **`GET /api/events`** — the catalogue. Tested at the repository, against real Mongo, by `EventRepositoryBrowseIntegrationTest`, and at the controller against a mocked module. Nothing joined the two ends, so parameter binding and the Published-only rule were proven separately from each other and never together.
+- **`GET /api/events`** — Event discovery. Tested at the repository, against real Mongo, by `EventRepositoryBrowseIntegrationTest`, and at the controller against a mocked module. Nothing joined the two ends, so parameter binding and the Published-only rule were proven separately from each other and never together.
 
 Both now have one in `EventRegistrationAccessIntegrationTest`. The retry test was run once with the answer write removed from `RegistrationModuleImpl.retryAnswers` and failed on the read-back assertion, for the same reason [the guard-removal record](EVIDENCE.md#the-guard-removal-record) exists: a test that passes with its subject deleted was not testing it.
 
