@@ -1,9 +1,12 @@
 package com.campushub.venue.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.campushub.venue.VenueModule;
+import com.campushub.venue.VenueModule.Slot;
 import com.campushub.venue.VenueModule.SlotRequestOutcome;
+import com.campushub.venue.VenueModule.SlotRequestResult;
 import com.campushub.venue.persistence.VenueRepository;
 import com.mongodb.client.MongoClients;
 import java.time.Clock;
@@ -40,7 +43,7 @@ class VenueModuleImplIntegrationTest {
         MongoTemplate mongoTemplate = new MongoTemplate(
                 MongoClients.create(MONGO_DB.getConnectionString()), "venue-module-test-" + UUID.randomUUID());
         repository = new VenueRepository(mongoTemplate);
-        repository.ensureIndexes();
+        new VenueStructuralChangeUnit().execution(repository);
         venueModule = new VenueModuleImpl(
                 repository, Clock.fixed(NOW, ZoneOffset.UTC), ZoneId.of("Europe/Dublin"));
     }
@@ -105,15 +108,13 @@ class VenueModuleImplIntegrationTest {
     void backToBackSlotsAtASharedBoundaryBothSucceed() {
         String venueId = venueModule.createVenue("Seminar Room");
 
-        SlotRequestOutcome first = venueModule
-                .requestSlot(
+        SlotRequestOutcome first = requestSlot(
                         venueId,
                         "event-a",
                         Instant.parse("2026-03-20T10:00:00Z"),
                         Instant.parse("2026-03-20T11:00:00Z"))
                 .outcome();
-        SlotRequestOutcome second = venueModule
-                .requestSlot(
+        SlotRequestOutcome second = requestSlot(
                         venueId,
                         "event-b",
                         Instant.parse("2026-03-20T11:00:00Z"),
@@ -121,6 +122,28 @@ class VenueModuleImplIntegrationTest {
                 .outcome();
 
         assertThat(List.of(first, second)).containsOnly(SlotRequestOutcome.ACQUIRED);
+    }
+
+    @Test
+    void subMinuteTimesCannotHideARealOverlap() {
+        String venueId = venueModule.createVenue("Precision Hall");
+
+        assertThatThrownBy(() -> requestSlot(
+                        venueId,
+                        "event-a",
+                        Instant.parse("2026-03-20T10:00:30Z"),
+                        Instant.parse("2026-03-20T10:01:30Z")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("whole minutes");
+        assertThatThrownBy(() -> requestSlot(
+                        venueId,
+                        "event-b",
+                        Instant.parse("2026-03-20T10:01:15Z"),
+                        Instant.parse("2026-03-20T10:02:00Z")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("whole minutes");
+        assertThat(venueModule.findDay(venueId, LocalDate.parse("2026-03-20")).orElseThrow().bookings())
+                .isEmpty();
     }
 
     @Test
@@ -144,8 +167,7 @@ class VenueModuleImplIntegrationTest {
 
     @Test
     void bookingRefusesAnUnknownVenueAndARequestAtNow() {
-        assertThat(venueModule
-                        .requestSlot(
+        assertThat(requestSlot(
                                 "missing",
                                 "event-a",
                                 Instant.parse("2026-03-20T10:00:00Z"),
@@ -153,8 +175,7 @@ class VenueModuleImplIntegrationTest {
                         .outcome())
                 .isEqualTo(SlotRequestOutcome.NOT_FOUND);
         String venueId = venueModule.createVenue("Frozen Hall");
-        assertThat(venueModule
-                        .requestSlot(venueId, "event-a", NOW, NOW.plusSeconds(3_600))
+        assertThat(requestSlot(venueId, "event-a", NOW, NOW.plusSeconds(3_600))
                         .outcome())
                 .isEqualTo(SlotRequestOutcome.SLOT_ALREADY_STARTED);
     }
@@ -163,8 +184,7 @@ class VenueModuleImplIntegrationTest {
     void bookingRefusesAnEndThatIsNotAfterTheStart() {
         String venueId = venueModule.createVenue("Reverse Hall");
 
-        assertThat(venueModule
-                        .requestSlot(
+        assertThat(requestSlot(
                                 venueId,
                                 "event-a",
                                 Instant.parse("2026-03-20T11:00:00Z"),
@@ -177,8 +197,7 @@ class VenueModuleImplIntegrationTest {
     void aSlotCrossingCampusMidnightIsRefused() {
         String venueId = venueModule.createVenue("Late Lab");
 
-        SlotRequestOutcome outcome = venueModule
-                .requestSlot(
+        SlotRequestOutcome outcome = requestSlot(
                         venueId,
                         "event-a",
                         Instant.parse("2026-03-20T23:30:00Z"),
@@ -193,15 +212,13 @@ class VenueModuleImplIntegrationTest {
         venueModule = moduleAt("2026-03-29T00:00:00Z");
         String venueId = venueModule.createVenue("Spring Hall");
 
-        SlotRequestOutcome throughMissingHour = venueModule
-                .requestSlot(
+        SlotRequestOutcome throughMissingHour = requestSlot(
                         venueId,
                         "event-a",
                         Instant.parse("2026-03-29T00:30:00Z"),
                         Instant.parse("2026-03-29T01:30:00Z"))
                 .outcome();
-        SlotRequestOutcome afterTransition = venueModule
-                .requestSlot(
+        SlotRequestOutcome afterTransition = requestSlot(
                         venueId,
                         "event-b",
                         Instant.parse("2026-03-29T01:30:00Z"),
@@ -217,22 +234,19 @@ class VenueModuleImplIntegrationTest {
         venueModule = moduleAt("2026-10-25T00:00:00Z");
         String venueId = venueModule.createVenue("Autumn Hall");
 
-        SlotRequestOutcome firstCopy = venueModule
-                .requestSlot(
+        SlotRequestOutcome firstCopy = requestSlot(
                         venueId,
                         "event-a",
                         Instant.parse("2026-10-25T00:15:00Z"),
                         Instant.parse("2026-10-25T00:45:00Z"))
                 .outcome();
-        SlotRequestOutcome secondCopy = venueModule
-                .requestSlot(
+        SlotRequestOutcome secondCopy = requestSlot(
                         venueId,
                         "event-b",
                         Instant.parse("2026-10-25T01:15:00Z"),
                         Instant.parse("2026-10-25T01:45:00Z"))
                 .outcome();
-        SlotRequestOutcome afterTransition = venueModule
-                .requestSlot(
+        SlotRequestOutcome afterTransition = requestSlot(
                         venueId,
                         "event-c",
                         Instant.parse("2026-10-25T02:00:00Z"),
@@ -247,12 +261,12 @@ class VenueModuleImplIntegrationTest {
     @Test
     void theVenueDayViewIsOrderedAndReleaseIsIdempotent() {
         String venueId = venueModule.createVenue("Timeline Hall");
-        venueModule.requestSlot(
+        requestSlot(
                 venueId,
                 "event-late",
                 Instant.parse("2026-03-20T14:00:00Z"),
                 Instant.parse("2026-03-20T15:00:00Z"));
-        venueModule.requestSlot(
+        requestSlot(
                 venueId,
                 "event-early",
                 Instant.parse("2026-03-20T10:00:00Z"),
@@ -262,16 +276,12 @@ class VenueModuleImplIntegrationTest {
                 .extracting(VenueModule.DayBooking::eventId)
                 .containsExactly("event-early", "event-late");
 
-        venueModule.releaseSlot(
+        Slot early = new Slot(
                 venueId,
-                "event-early",
                 Instant.parse("2026-03-20T10:00:00Z"),
                 Instant.parse("2026-03-20T11:00:00Z"));
-        venueModule.releaseSlot(
-                venueId,
-                "event-early",
-                Instant.parse("2026-03-20T10:00:00Z"),
-                Instant.parse("2026-03-20T11:00:00Z"));
+        venueModule.releaseReservation("event-early", early);
+        venueModule.releaseReservation("event-early", early);
 
         assertThat(venueModule.findDay(venueId, LocalDate.parse("2026-03-20")).orElseThrow().bookings())
                 .extracting(VenueModule.DayBooking::eventId)
@@ -295,6 +305,11 @@ class VenueModuleImplIntegrationTest {
             throws InterruptedException {
         ready.countDown();
         start.await();
-        return venueModule.requestSlot(venueId, eventId, startsAt, endsAt).outcome();
+        return requestSlot(venueId, eventId, startsAt, endsAt).outcome();
+    }
+
+    private SlotRequestResult requestSlot(
+            String venueId, String eventId, Instant startsAt, Instant endsAt) {
+        return venueModule.requestSlot(eventId, new Slot(venueId, startsAt, endsAt));
     }
 }

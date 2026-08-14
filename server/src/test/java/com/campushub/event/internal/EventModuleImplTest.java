@@ -32,6 +32,7 @@ import com.campushub.event.persistence.EventRepository;
 import com.campushub.shared.ErrorCode;
 import com.campushub.shared.FormValidationException;
 import com.campushub.venue.VenueModule;
+import com.campushub.venue.VenueModule.Slot;
 import com.campushub.venue.VenueModule.SlotRequestOutcome;
 import com.campushub.venue.VenueModule.SlotRequestResult;
 import java.math.BigDecimal;
@@ -203,7 +204,9 @@ class EventModuleImplTest {
 
     @Test
     void cancelAsOfficerDelegatesToTheRepositoryWithNow() {
-        when(repository.cancelAsOfficer("event-1", CLUB_IDS, NOW)).thenReturn(true);
+        Event upcoming = mock(Event.class);
+        when(upcoming.getStartsAt()).thenReturn(NOW.plusSeconds(60));
+        when(repository.cancelAsOfficer("event-1", CLUB_IDS, NOW)).thenReturn(Optional.of(upcoming));
 
         assertThat(module.cancelAsOfficer("event-1", CLUB_IDS)).isEqualTo(EventCommandResult.SUCCESS);
 
@@ -213,8 +216,21 @@ class EventModuleImplTest {
     }
 
     @Test
+    void cancellingAnEventInProgressKeepsItsVenueSlot() {
+        Event inProgress = mock(Event.class);
+        when(inProgress.getStartsAt()).thenReturn(NOW.minusSeconds(60));
+        when(repository.cancelAsOfficer("event-1", CLUB_IDS, NOW)).thenReturn(Optional.of(inProgress));
+
+        assertThat(module.cancelAsOfficer("event-1", CLUB_IDS)).isEqualTo(EventCommandResult.SUCCESS);
+
+        verify(venueModule, never()).releaseEventSlots("event-1");
+    }
+
+    @Test
     void cancelAsAdminIsUnscopedByClub() {
-        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(true);
+        Event upcoming = mock(Event.class);
+        when(upcoming.getStartsAt()).thenReturn(NOW.plusSeconds(60));
+        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(Optional.of(upcoming));
 
         assertThat(module.cancelAsAdmin("event-1")).isEqualTo(EventCommandResult.SUCCESS);
         verify(repository).cancelAsAdmin("event-1", NOW);
@@ -222,7 +238,7 @@ class EventModuleImplTest {
 
     @Test
     void cancelAsAdminClassifiesAFailureAsNotFoundWhenTheEventDoesNotExistAtAll() {
-        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(false);
+        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(Optional.empty());
         when(repository.exists("event-1")).thenReturn(false);
 
         assertThat(module.cancelAsAdmin("event-1")).isEqualTo(EventCommandResult.NOT_FOUND);
@@ -230,7 +246,7 @@ class EventModuleImplTest {
 
     @Test
     void cancelAsAdminClassifiesAFailureAsNotEditableWhenAlreadyCancelled() {
-        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(false);
+        when(repository.cancelAsAdmin("event-1", NOW)).thenReturn(Optional.empty());
         when(repository.exists("event-1")).thenReturn(true);
 
         assertThat(module.cancelAsAdmin("event-1")).isEqualTo(EventCommandResult.NOT_EDITABLE);
@@ -248,22 +264,15 @@ class EventModuleImplTest {
         when(event.getStartsAt()).thenReturn(oldStart);
         when(event.getEndsAt()).thenReturn(oldEnd);
         when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
-        when(venueModule.requestSlot("new-venue", "event-1", newStart, newEnd))
+        Slot oldSlot = new Slot("old-venue", oldStart, oldEnd);
+        Slot newSlot = new Slot("new-venue", newStart, newEnd);
+        when(venueModule.requestSlot("event-1", newSlot))
                 .thenReturn(new SlotRequestResult(SlotRequestOutcome.ACQUIRED, List.of()));
-        when(repository.moveToSlot(
-                        "event-1",
-                        CLUB_IDS,
-                        "old-venue",
-                        oldStart,
-                        oldEnd,
-                        "new-venue",
-                        newStart,
-                        newEnd,
-                        NOW))
-                .thenReturn(true);
+        when(repository.moveToSlot("event-1", CLUB_IDS, newSlot, NOW))
+                .thenReturn(Optional.of(event));
         doThrow(new IllegalStateException("injected release failure"))
                 .when(venueModule)
-                .releaseSlot("old-venue", "event-1", oldStart, oldEnd);
+                .releaseReservation("event-1", oldSlot);
 
         assertThatThrownBy(() -> module.bookSlotAsOfficer(
                         "event-1", CLUB_IDS, "new-venue", newStart, newEnd))
@@ -271,19 +280,9 @@ class EventModuleImplTest {
                 .hasMessage("injected release failure");
 
         InOrder order = inOrder(venueModule, repository);
-        order.verify(venueModule).requestSlot("new-venue", "event-1", newStart, newEnd);
-        order.verify(repository)
-                .moveToSlot(
-                        "event-1",
-                        CLUB_IDS,
-                        "old-venue",
-                        oldStart,
-                        oldEnd,
-                        "new-venue",
-                        newStart,
-                        newEnd,
-                        NOW);
-        order.verify(venueModule).releaseSlot("old-venue", "event-1", oldStart, oldEnd);
+        order.verify(venueModule).requestSlot("event-1", newSlot);
+        order.verify(repository).moveToSlot("event-1", CLUB_IDS, newSlot, NOW);
+        order.verify(venueModule).releaseReservation("event-1", oldSlot);
     }
 
     @Test
@@ -303,7 +302,7 @@ class EventModuleImplTest {
                 .isEqualTo(SlotCommandOutcome.NOT_EDITABLE);
         assertThat(module.bookSlotAsOfficer("started", CLUB_IDS, "venue-1", NOW, NOW.plusSeconds(1)))
                 .isEqualTo(SlotCommandOutcome.SLOT_ALREADY_STARTED);
-        verify(venueModule, never()).requestSlot(any(), any(), any(), any());
+        verify(venueModule, never()).requestSlot(any(), any());
     }
 
     @Test
@@ -316,7 +315,7 @@ class EventModuleImplTest {
 
         assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", startsAt, endsAt))
                 .isEqualTo(SlotCommandOutcome.SUCCESS);
-        verify(venueModule, never()).requestSlot(any(), any(), any(), any());
+        verify(venueModule, never()).requestSlot(any(), any());
     }
 
     @ParameterizedTest
@@ -328,55 +327,35 @@ class EventModuleImplTest {
         Instant endsAt = NOW.plusSeconds(7_200);
         Event event = bookableEvent(null, startsAt);
         when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
-        when(venueModule.requestSlot("venue-1", "event-1", startsAt, endsAt))
+        Slot slot = new Slot("venue-1", startsAt, endsAt);
+        when(venueModule.requestSlot("event-1", slot))
                 .thenReturn(new SlotRequestResult(venueOutcome, List.of()));
 
         assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", startsAt, endsAt))
                 .isEqualTo(eventOutcome);
-        verify(repository, never()).moveToSlot(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(repository, never()).moveToSlot(any(), any(), any(), any());
     }
 
     @ParameterizedTest
     @MethodSource("failedMoveClassifications")
-    void aLostEventCompareAndSetReleasesTheNewSlot(
+    void aRefusedGuardedEventMoveReleasesTheNewReservation(
             boolean stillExists,
             SlotCommandOutcome expected) {
         Instant oldStart = NOW.plusSeconds(3_600);
-        Instant oldEnd = NOW.plusSeconds(7_200);
         Instant newStart = NOW.plusSeconds(10_800);
         Instant newEnd = NOW.plusSeconds(14_400);
         Event event = bookableEvent(null, oldStart);
-        when(event.getEndsAt()).thenReturn(oldEnd);
         when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
-        when(venueModule.requestSlot("venue-1", "event-1", newStart, newEnd))
+        Slot newSlot = new Slot("venue-1", newStart, newEnd);
+        when(venueModule.requestSlot("event-1", newSlot))
                 .thenReturn(new SlotRequestResult(SlotRequestOutcome.ACQUIRED, List.of()));
-        when(repository.moveToSlot(
-                        "event-1",
-                        CLUB_IDS,
-                        null,
-                        oldStart,
-                        oldEnd,
-                        "venue-1",
-                        newStart,
-                        newEnd,
-                        NOW))
-                .thenReturn(false);
+        when(repository.moveToSlot("event-1", CLUB_IDS, newSlot, NOW))
+                .thenReturn(Optional.empty());
         when(repository.existsScoped("event-1", CLUB_IDS)).thenReturn(stillExists);
 
         assertThat(module.bookSlotAsOfficer("event-1", CLUB_IDS, "venue-1", newStart, newEnd))
                 .isEqualTo(expected);
-        verify(venueModule).releaseSlot("venue-1", "event-1", newStart, newEnd);
-    }
-
-    @Test
-    void adminBookingAndReleaseClassifyMissingEventsWithoutAClubScopedRead() {
-        when(repository.findById("missing")).thenReturn(Optional.empty());
-
-        assertThat(module.bookSlotAsAdmin("missing", "venue-1", NOW, NOW.plusSeconds(1)))
-                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
-        assertThat(module.releaseSlotAsAdmin("missing"))
-                .isEqualTo(SlotCommandOutcome.NOT_FOUND);
-        verify(repository, never()).findScopedById(eq("missing"), any());
+        verify(venueModule).releaseReservation("event-1", newSlot);
     }
 
     @Test
@@ -388,7 +367,7 @@ class EventModuleImplTest {
 
         assertThat(module.releaseSlotAsOfficer("event-1", CLUB_IDS))
                 .isEqualTo(SlotCommandOutcome.SUCCESS);
-        verify(repository, never()).clearVenue(any(), any(), any(), any(), any());
+        verify(repository, never()).clearVenue(any(), any(), any());
         verify(venueModule).releaseEventSlots("event-1");
     }
 
@@ -408,7 +387,7 @@ class EventModuleImplTest {
 
     @ParameterizedTest
     @MethodSource("failedMoveClassifications")
-    void aLostReleaseCompareAndSetKeepsTheSlot(
+    void aRefusedGuardedReleaseKeepsTheSlot(
             boolean stillExists,
             SlotCommandOutcome expected) {
         Instant startsAt = NOW.plusSeconds(3_600);
@@ -416,8 +395,7 @@ class EventModuleImplTest {
         when(event.getStartsAt()).thenReturn(startsAt);
         when(event.getVenueId()).thenReturn("venue-1");
         when(repository.findScopedById("event-1", CLUB_IDS)).thenReturn(Optional.of(event));
-        when(repository.clearVenue("event-1", CLUB_IDS, "venue-1", startsAt, NOW))
-                .thenReturn(false);
+        when(repository.clearVenue("event-1", CLUB_IDS, NOW)).thenReturn(Optional.empty());
         when(repository.existsScoped("event-1", CLUB_IDS)).thenReturn(stillExists);
 
         assertThat(module.releaseSlotAsOfficer("event-1", CLUB_IDS)).isEqualTo(expected);
@@ -431,7 +409,7 @@ class EventModuleImplTest {
 
         assertThat(module.findVenueDay("missing", java.time.LocalDate.parse("2026-03-20")))
                 .isEmpty();
-        verify(repository, never()).cancelledEventIds(any());
+        verify(repository, never()).cancelledUpcomingEventIds(any(), any());
     }
 
     @Test

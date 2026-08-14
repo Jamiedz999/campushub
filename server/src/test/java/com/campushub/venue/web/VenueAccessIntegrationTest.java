@@ -137,6 +137,22 @@ class VenueAccessIntegrationTest {
     }
 
     @Test
+    void anAdminManagesVenueRecordsButCannotBookOrReleaseAnEventsSlot() throws Exception {
+        Session admin = Session.signIn(port, adminEmail, PASSWORD);
+        String venueId = extractId(admin.post("/venues", "{\"name\":\"Admin Boundary Hall\"}").body());
+        Session officer = Session.signIn(port, officerAEmail, PASSWORD);
+        String eventId = extractId(officer.createDraft(clubAId, "Officer-owned Event").body());
+
+        assertThat(admin.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
+                .isEqualTo(404);
+        assertThat(officer.put("/events/" + eventId + "/slot", slot(venueId)).statusCode())
+                .isEqualTo(204);
+        assertThat(admin.delete("/events/" + eventId + "/slot").statusCode())
+                .isEqualTo(404);
+        assertThat(officer.get("/events/" + eventId).body()).contains("\"venueId\":\"" + venueId + "\"");
+    }
+
+    @Test
     void aLostOverlappingBookingRaceReturnsTheStableSlotTakenProblem() throws Exception {
         Session admin = Session.signIn(port, adminEmail, PASSWORD);
         String venueId = extractId(admin.post("/venues", "{\"name\":\"Busy Hall\"}").body());

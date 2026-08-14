@@ -34,15 +34,12 @@ class VenueSlotController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void book(@PathVariable String eventId, @Valid @RequestBody BookSlotRequest request) {
         CurrentActor actor = identityAccessModule.currentActor();
-        SlotCommandOutcome outcome = actor.isUniversityAdmin()
-                ? eventModule.bookSlotAsAdmin(
-                        eventId, request.venueId(), request.startsAt(), request.endsAt())
-                : eventModule.bookSlotAsOfficer(
-                        eventId,
-                        actor.officerClubIds(),
-                        request.venueId(),
-                        request.startsAt(),
-                        request.endsAt());
+        SlotCommandOutcome outcome = eventModule.bookSlotAsOfficer(
+                eventId,
+                actor.officerClubIds(),
+                request.venueId(),
+                request.startsAt(),
+                request.endsAt());
         handle(outcome);
     }
 
@@ -50,9 +47,7 @@ class VenueSlotController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void release(@PathVariable String eventId) {
         CurrentActor actor = identityAccessModule.currentActor();
-        SlotCommandOutcome outcome = actor.isUniversityAdmin()
-                ? eventModule.releaseSlotAsAdmin(eventId)
-                : eventModule.releaseSlotAsOfficer(eventId, actor.officerClubIds());
+        SlotCommandOutcome outcome = eventModule.releaseSlotAsOfficer(eventId, actor.officerClubIds());
         handle(outcome);
     }
 

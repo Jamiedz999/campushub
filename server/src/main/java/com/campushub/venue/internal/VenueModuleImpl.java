@@ -57,32 +57,32 @@ class VenueModuleImpl implements VenueModule {
     }
 
     @Override
-    public SlotRequestResult requestSlot(String venueId, String eventId, Instant startsAt, Instant endsAt) {
-        if (!repository.venueExists(venueId)) {
+    public SlotRequestResult requestSlot(String eventId, Slot slot) {
+        if (!repository.venueExists(slot.venueId())) {
             return result(SlotRequestOutcome.NOT_FOUND);
         }
-        if (!startsAt.isAfter(clock.instant())) {
+        if (!slot.startsAt().isAfter(clock.instant())) {
             return result(SlotRequestOutcome.SLOT_ALREADY_STARTED);
         }
 
-        ZonedDateTime localStart = startsAt.atZone(campusZone);
-        ZonedDateTime localEnd = endsAt.atZone(campusZone);
-        if (!endsAt.isAfter(startsAt) || !localStart.toLocalDate().equals(localEnd.toLocalDate())) {
+        ZonedDateTime localStart = slot.startsAt().atZone(campusZone);
+        ZonedDateTime localEnd = slot.endsAt().atZone(campusZone);
+        if (!slot.endsAt().isAfter(slot.startsAt())
+                || !localStart.toLocalDate().equals(localEnd.toLocalDate())) {
             return result(SlotRequestOutcome.SLOT_CROSSES_MIDNIGHT);
         }
-        if (intersectsDstTransition(startsAt, endsAt, localStart.toLocalDate())) {
+        if (intersectsDstTransition(slot.startsAt(), slot.endsAt(), localStart.toLocalDate())) {
             return result(SlotRequestOutcome.SLOT_IN_DST_TRANSITION);
         }
-
         int startMinute = minuteOfDay(localStart);
         int endMinute = minuteOfDay(localEnd);
         boolean acquired = repository.acquire(
-                venueId, localStart.toLocalDate(), new Booking(eventId, startMinute, endMinute));
+                slot.venueId(), localStart.toLocalDate(), new Booking(eventId, startMinute, endMinute));
         if (acquired) {
             return result(SlotRequestOutcome.ACQUIRED);
         }
         List<String> conflicts = repository.conflictingEventIds(
-                venueId, localStart.toLocalDate(), startMinute, endMinute);
+                slot.venueId(), localStart.toLocalDate(), startMinute, endMinute);
         return new SlotRequestResult(SlotRequestOutcome.SLOT_TAKEN, conflicts);
     }
 
@@ -100,11 +100,11 @@ class VenueModuleImpl implements VenueModule {
     }
 
     @Override
-    public void releaseSlot(String venueId, String eventId, Instant startsAt, Instant endsAt) {
-        ZonedDateTime localStart = startsAt.atZone(campusZone);
-        ZonedDateTime localEnd = endsAt.atZone(campusZone);
+    public void releaseReservation(String eventId, Slot slot) {
+        ZonedDateTime localStart = slot.startsAt().atZone(campusZone);
+        ZonedDateTime localEnd = slot.endsAt().atZone(campusZone);
         repository.release(
-                venueId,
+                slot.venueId(),
                 localStart.toLocalDate(),
                 new Booking(eventId, minuteOfDay(localStart), minuteOfDay(localEnd)));
     }

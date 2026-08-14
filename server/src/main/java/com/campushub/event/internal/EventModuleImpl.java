@@ -18,6 +18,7 @@ import com.campushub.event.domain.Phase;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.event.persistence.EventRepository;
 import com.campushub.venue.VenueModule;
+import com.campushub.venue.VenueModule.Slot;
 import com.campushub.venue.VenueModule.SlotRequestOutcome;
 import com.campushub.venue.VenueModule.SlotRequestResult;
 import java.time.Clock;
@@ -95,20 +96,22 @@ class EventModuleImpl implements EventModule {
 
     @Override
     public EventCommandResult cancelAsOfficer(String eventId, Set<String> callerOfficerClubIds) {
-        boolean applied = repository.cancelAsOfficer(eventId, callerOfficerClubIds, clock.instant());
-        if (applied) {
+        Instant now = clock.instant();
+        Optional<Event> cancelled = repository.cancelAsOfficer(eventId, callerOfficerClubIds, now);
+        if (cancelled.filter(event -> now.isBefore(event.getStartsAt())).isPresent()) {
             venueModule.releaseEventSlots(eventId);
         }
-        return classify(applied, () -> repository.existsScoped(eventId, callerOfficerClubIds));
+        return classify(cancelled.isPresent(), () -> repository.existsScoped(eventId, callerOfficerClubIds));
     }
 
     @Override
     public EventCommandResult cancelAsAdmin(String eventId) {
-        boolean applied = repository.cancelAsAdmin(eventId, clock.instant());
-        if (applied) {
+        Instant now = clock.instant();
+        Optional<Event> cancelled = repository.cancelAsAdmin(eventId, now);
+        if (cancelled.filter(event -> now.isBefore(event.getStartsAt())).isPresent()) {
             venueModule.releaseEventSlots(eventId);
         }
-        return classify(applied, () -> repository.exists(eventId));
+        return classify(cancelled.isPresent(), () -> repository.exists(eventId));
     }
 
     @Override
@@ -129,47 +132,29 @@ class EventModuleImpl implements EventModule {
         if (!clock.instant().isBefore(event.getStartsAt())) {
             return SlotCommandOutcome.SLOT_ALREADY_STARTED;
         }
-        if (sameSlot(event, venueId, startsAt, endsAt)) {
+        Slot requestedSlot = new Slot(venueId, startsAt, endsAt);
+        if (sameSlot(event, requestedSlot)) {
             return SlotCommandOutcome.SUCCESS;
         }
 
-        SlotRequestResult request = requestSlotWithOrphanRepair(venueId, eventId, startsAt, endsAt);
+        SlotRequestResult request = requestSlotWithOrphanRepair(eventId, requestedSlot);
         if (request.outcome() != SlotRequestOutcome.ACQUIRED) {
             return map(request.outcome());
         }
 
-        boolean moved = repository.moveToSlot(
-                eventId,
-                callerOfficerClubIds,
-                event.getVenueId(),
-                event.getStartsAt(),
-                event.getEndsAt(),
-                venueId,
-                startsAt,
-                endsAt,
-                clock.instant());
-        if (!moved) {
-            venueModule.releaseSlot(venueId, eventId, startsAt, endsAt);
+        Optional<Event> previous =
+                repository.moveToSlot(eventId, callerOfficerClubIds, requestedSlot, clock.instant());
+        if (previous.isEmpty()) {
+            venueModule.releaseReservation(eventId, requestedSlot);
             return repository.existsScoped(eventId, callerOfficerClubIds)
                     ? SlotCommandOutcome.NOT_EDITABLE
                     : SlotCommandOutcome.NOT_FOUND;
         }
-        if (event.getVenueId() != null) {
-            venueModule.releaseSlot(
-                    event.getVenueId(), eventId, event.getStartsAt(), event.getEndsAt());
+        Event replaced = previous.get();
+        if (replaced.getVenueId() != null && !sameSlot(replaced, requestedSlot)) {
+            venueModule.releaseReservation(eventId, slotOf(replaced));
         }
         return SlotCommandOutcome.SUCCESS;
-    }
-
-    @Override
-    public SlotCommandOutcome bookSlotAsAdmin(
-            String eventId, String venueId, Instant startsAt, Instant endsAt) {
-        Optional<Event> event = repository.findById(eventId);
-        if (event.isEmpty()) {
-            return SlotCommandOutcome.NOT_FOUND;
-        }
-        return bookSlotAsOfficer(
-                eventId, Set.of(event.get().getClubId()), venueId, startsAt, endsAt);
     }
 
     @Override
@@ -184,13 +169,8 @@ class EventModuleImpl implements EventModule {
             return SlotCommandOutcome.SLOT_ALREADY_STARTED;
         }
         if (event.getVenueId() != null) {
-            boolean cleared = repository.clearVenue(
-                    eventId,
-                    callerOfficerClubIds,
-                    event.getVenueId(),
-                    event.getStartsAt(),
-                    clock.instant());
-            if (!cleared) {
+            Optional<Event> cleared = repository.clearVenue(eventId, callerOfficerClubIds, clock.instant());
+            if (cleared.isEmpty()) {
                 return repository.existsScoped(eventId, callerOfficerClubIds)
                         ? SlotCommandOutcome.NOT_EDITABLE
                         : SlotCommandOutcome.NOT_FOUND;
@@ -201,23 +181,16 @@ class EventModuleImpl implements EventModule {
     }
 
     @Override
-    public SlotCommandOutcome releaseSlotAsAdmin(String eventId) {
-        Optional<Event> event = repository.findById(eventId);
-        if (event.isEmpty()) {
-            return SlotCommandOutcome.NOT_FOUND;
-        }
-        return releaseSlotAsOfficer(eventId, Set.of(event.get().getClubId()));
-    }
-
-    @Override
     public Optional<VenueModule.VenueDayView> findVenueDay(String venueId, LocalDate date) {
         Optional<VenueModule.VenueDayView> current = venueModule.findDay(venueId, date);
         if (current.isEmpty()) {
             return Optional.empty();
         }
-        Set<String> cancelled = repository.cancelledEventIds(current.get().bookings().stream()
-                .map(VenueModule.DayBooking::eventId)
-                .toList());
+        Set<String> cancelled = repository.cancelledUpcomingEventIds(
+                current.get().bookings().stream()
+                        .map(VenueModule.DayBooking::eventId)
+                        .toList(),
+                clock.instant());
         if (cancelled.isEmpty()) {
             return current;
         }
@@ -225,24 +198,27 @@ class EventModuleImpl implements EventModule {
         return venueModule.findDay(venueId, date);
     }
 
-    private SlotRequestResult requestSlotWithOrphanRepair(
-            String venueId, String eventId, Instant startsAt, Instant endsAt) {
-        SlotRequestResult first = venueModule.requestSlot(venueId, eventId, startsAt, endsAt);
+    private SlotRequestResult requestSlotWithOrphanRepair(String eventId, Slot slot) {
+        SlotRequestResult first = venueModule.requestSlot(eventId, slot);
         if (first.outcome() != SlotRequestOutcome.SLOT_TAKEN) {
             return first;
         }
-        Set<String> cancelled = repository.cancelledEventIds(first.conflictingEventIds());
+        Set<String> cancelled = repository.cancelledUpcomingEventIds(first.conflictingEventIds(), clock.instant());
         if (cancelled.isEmpty()) {
             return first;
         }
-        venueModule.removeBookings(venueId, startsAt, cancelled);
-        return venueModule.requestSlot(venueId, eventId, startsAt, endsAt);
+        venueModule.removeBookings(slot.venueId(), slot.startsAt(), cancelled);
+        return venueModule.requestSlot(eventId, slot);
     }
 
-    private static boolean sameSlot(Event event, String venueId, Instant startsAt, Instant endsAt) {
-        return venueId.equals(event.getVenueId())
-                && startsAt.equals(event.getStartsAt())
-                && endsAt.equals(event.getEndsAt());
+    private static boolean sameSlot(Event event, Slot slot) {
+        return slot.venueId().equals(event.getVenueId())
+                && slot.startsAt().equals(event.getStartsAt())
+                && slot.endsAt().equals(event.getEndsAt());
+    }
+
+    private static Slot slotOf(Event event) {
+        return new Slot(event.getVenueId(), event.getStartsAt(), event.getEndsAt());
     }
 
     private static SlotCommandOutcome map(SlotRequestOutcome outcome) {

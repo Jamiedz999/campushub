@@ -9,6 +9,7 @@ import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
+import com.campushub.venue.VenueModule.Slot;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -150,15 +151,17 @@ public class EventRepository {
         return Optional.ofNullable(mongoTemplate.findById(eventId, Event.class));
     }
 
-    /** Cancelled Events among the supplied ids, used to repair orphan Venue bookings. */
-    public Set<String> cancelledEventIds(List<String> eventIds) {
+    /** Cancelled Events that have not started, used to repair only genuinely releasable orphans. */
+    public Set<String> cancelledUpcomingEventIds(List<String> eventIds, Instant now) {
         if (eventIds.isEmpty()) {
             return Set.of();
         }
         Query query = new Query(Criteria.where("id")
                 .in(eventIds)
                 .and("status")
-                .is(EventStatus.CANCELLED));
+                .is(EventStatus.CANCELLED)
+                .and("startsAt")
+                .gt(now));
         return mongoTemplate.find(query, Event.class).stream()
                 .map(Event::getId)
                 .collect(java.util.stream.Collectors.toSet());
@@ -236,57 +239,46 @@ public class EventRepository {
     }
 
     /**
-     * Moves the Event only if the scoped snapshot used before acquiring the new Slot is still current.
-     * The compare-and-set prevents two concurrent reschedules from both becoming canonical.
+     * Atomically moves the current Event and returns the Slot-bearing snapshot that was replaced. The
+     * lifecycle and ownership guards are part of this one database write; there is no application CAS.
      */
-    public boolean moveToSlot(
-            String eventId,
-            Set<String> clubIds,
-            String expectedVenueId,
-            Instant expectedStartsAt,
-            Instant expectedEndsAt,
-            String newVenueId,
-            Instant newStartsAt,
-            Instant newEndsAt,
-            Instant now) {
+    public Optional<Event> moveToSlot(String eventId, Set<String> clubIds, Slot newSlot, Instant now) {
         Criteria filter = Criteria.where("id")
                 .is(eventId)
                 .and("clubId")
                 .in(clubIds)
                 .and("status")
                 .ne(EventStatus.CANCELLED)
-                .and("venueId")
-                .is(expectedVenueId)
                 .and("startsAt")
-                .is(expectedStartsAt)
-                .gt(now)
-                .and("endsAt")
-                .is(expectedEndsAt);
+                .gt(now);
         Update update = new Update()
-                .set("venueId", newVenueId)
-                .set("startsAt", newStartsAt)
-                .set("endsAt", newEndsAt);
-        return mongoTemplate.updateFirst(new Query(filter), update, Event.class).getModifiedCount() > 0;
+                .set("venueId", newSlot.venueId())
+                .set("startsAt", newSlot.startsAt())
+                .set("endsAt", newSlot.endsAt());
+        Event previous = mongoTemplate.findAndModify(
+                new Query(filter),
+                update,
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
     }
 
-    public boolean clearVenue(
-            String eventId,
-            Set<String> clubIds,
-            String expectedVenueId,
-            Instant expectedStartsAt,
-            Instant now) {
+    /** Atomically clears the current Venue and returns the Event snapshot that held it. */
+    public Optional<Event> clearVenue(String eventId, Set<String> clubIds, Instant now) {
         Criteria filter = Criteria.where("id")
                 .is(eventId)
                 .and("clubId")
                 .in(clubIds)
                 .and("venueId")
-                .is(expectedVenueId)
+                .ne(null)
                 .and("startsAt")
-                .is(expectedStartsAt)
                 .gt(now);
-        return mongoTemplate.updateFirst(new Query(filter), new Update().unset("venueId"), Event.class)
-                        .getModifiedCount()
-                > 0;
+        Event previous = mongoTemplate.findAndModify(
+                new Query(filter),
+                new Update().unset("venueId"),
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
     }
 
     private static AggregationUpdate capacityRaiseUpdate(EventEdit edit, Instant now) {
@@ -355,7 +347,7 @@ public class EventRepository {
     }
 
     /** The owning Club's Officer. Published only, and only before endsAt. */
-    public boolean cancelAsOfficer(String eventId, Set<String> clubIds, Instant now) {
+    public Optional<Event> cancelAsOfficer(String eventId, Set<String> clubIds, Instant now) {
         Query query = new Query(Criteria.where("id")
                 .is(eventId)
                 .and("clubId")
@@ -371,7 +363,7 @@ public class EventRepository {
      * A University Admin, unscoped by Club — the one cross-Club write in the system. See
      * docs/adr/08-define-roles-and-resource-authorization.md.
      */
-    public boolean cancelAsAdmin(String eventId, Instant now) {
+    public Optional<Event> cancelAsAdmin(String eventId, Instant now) {
         Query query = new Query(Criteria.where("id")
                 .is(eventId)
                 .and("status")
@@ -381,11 +373,16 @@ public class EventRepository {
         return cancel(query);
     }
 
-    private boolean cancel(Query query) {
+    private Optional<Event> cancel(Query query) {
         // Only `status` is set: the Seat Ledger (enrolled, waitlist) is untouched and freezes exactly as
         // it was, per docs/adr/03-define-event-lifecycle.md.
         Update update = new Update().set("status", EventStatus.CANCELLED);
-        return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+        Event previous = mongoTemplate.findAndModify(
+                query,
+                update,
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
     }
 
     /**

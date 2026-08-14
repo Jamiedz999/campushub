@@ -230,15 +230,8 @@ public interface EventModule {
             Instant startsAt,
             Instant endsAt);
 
-    /** University Admin path, unscoped by Club. */
-    SlotCommandOutcome bookSlotAsAdmin(
-            String eventId, String venueId, Instant startsAt, Instant endsAt);
-
     /** Idempotently releases all Slots for an Officer-scoped Event, until it starts. */
     SlotCommandOutcome releaseSlotAsOfficer(String eventId, Set<String> callerOfficerClubIds);
-
-    /** University Admin release path, unscoped by Club. */
-    SlotCommandOutcome releaseSlotAsAdmin(String eventId);
 
     /** Venue-day timeline after cancelled Event orphan bookings have been removed. */
     Optional<VenueDayView> findVenueDay(String venueId, LocalDate date);

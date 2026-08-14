@@ -62,8 +62,7 @@ public class VenueRepository {
         return Optional.ofNullable(mongoTemplate.findOne(query, VenueDay.class));
     }
 
-    public boolean acquire(
-            String venueId, LocalDate date, Booking booking) {
+    public boolean acquire(String venueId, LocalDate date, Booking booking) {
         try {
             return acquire(venueId, date, booking, true);
         } catch (DuplicateKeyException exception) {
@@ -73,8 +72,7 @@ public class VenueRepository {
         }
     }
 
-    private boolean acquire(
-            String venueId, LocalDate date, Booking booking, boolean upsert) {
+    private boolean acquire(String venueId, LocalDate date, Booking booking, boolean upsert) {
         Document overlap = new Document("$not", new Document("$elemMatch", new Document(
                                 "startMinute", new Document("$lt", booking.endMinute()))
                         .append("endMinute", new Document("$gt", booking.startMinute()))));

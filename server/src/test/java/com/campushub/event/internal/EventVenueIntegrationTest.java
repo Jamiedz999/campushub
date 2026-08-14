@@ -12,6 +12,7 @@ import com.campushub.event.domain.EventCommandResult;
 import com.campushub.event.domain.EventStatus;
 import com.campushub.event.persistence.EventRepository;
 import com.campushub.venue.VenueModule;
+import com.campushub.venue.VenueModule.Slot;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -106,7 +107,7 @@ class EventVenueIntegrationTest {
         VenueModule faultingVenueModule = spy(venueModule);
         doThrow(new IllegalStateException("injected old release failure"))
                 .when(faultingVenueModule)
-                .releaseSlot(oldVenueId, eventId, OLD_START, OLD_END);
+                .releaseReservation(eventId, new Slot(oldVenueId, OLD_START, OLD_END));
         EventModule faultingEventModule =
                 new EventModuleImpl(eventRepository, clock, faultingVenueModule);
 

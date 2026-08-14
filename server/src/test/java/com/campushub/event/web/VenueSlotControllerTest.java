@@ -2,7 +2,6 @@ package com.campushub.event.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,18 +58,22 @@ class VenueSlotControllerTest {
         controller.book("event-1", new BookSlotRequest("venue-1", START, END));
 
         verify(eventModule).bookSlotAsOfficer("event-1", Set.of("club-a"), "venue-1", START, END);
-        verify(eventModule, never()).bookSlotAsAdmin("event-1", "venue-1", START, END);
     }
 
     @Test
-    void aUniversityAdminBooksThroughTheUnscopedPath() {
+    void aUniversityAdminCannotBookOrReleaseSlots() {
         when(identityAccessModule.currentActor()).thenReturn(admin());
-        when(eventModule.bookSlotAsAdmin("event-1", "venue-1", START, END))
-                .thenReturn(SlotCommandOutcome.SUCCESS);
+        when(eventModule.bookSlotAsOfficer("event-1", Set.of(), "venue-1", START, END))
+                .thenReturn(SlotCommandOutcome.NOT_FOUND);
+        when(eventModule.releaseSlotAsOfficer("event-1", Set.of()))
+                .thenReturn(SlotCommandOutcome.NOT_FOUND);
 
-        controller.book("event-1", new BookSlotRequest("venue-1", START, END));
-
-        verify(eventModule).bookSlotAsAdmin("event-1", "venue-1", START, END);
+        assertThatThrownBy(() -> controller.book("event-1", new BookSlotRequest("venue-1", START, END)))
+                .isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> controller.release("event-1"))
+                .isInstanceOf(NotFoundException.class);
+        verify(eventModule).bookSlotAsOfficer("event-1", Set.of(), "venue-1", START, END);
+        verify(eventModule).releaseSlotAsOfficer("event-1", Set.of());
     }
 
     @Test
@@ -114,17 +117,14 @@ class VenueSlotControllerTest {
     }
 
     @Test
-    void releaseUsesTheOfficerScopedOrAdminPath() {
-        when(identityAccessModule.currentActor()).thenReturn(officer(), admin());
+    void releaseUsesTheOfficerScopedPath() {
+        when(identityAccessModule.currentActor()).thenReturn(officer());
         when(eventModule.releaseSlotAsOfficer("event-1", Set.of("club-a")))
                 .thenReturn(SlotCommandOutcome.SUCCESS);
-        when(eventModule.releaseSlotAsAdmin("event-1")).thenReturn(SlotCommandOutcome.SUCCESS);
 
-        controller.release("event-1");
         controller.release("event-1");
 
         verify(eventModule).releaseSlotAsOfficer("event-1", Set.of("club-a"));
-        verify(eventModule).releaseSlotAsAdmin("event-1");
     }
 
     @Test

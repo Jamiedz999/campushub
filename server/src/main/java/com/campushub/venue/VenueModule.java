@@ -43,6 +43,20 @@ public interface VenueModule {
         }
     }
 
+    /** One Event's requested Venue and half-open time interval. */
+    record Slot(String venueId, Instant startsAt, Instant endsAt) {
+
+        public Slot {
+            if (!isMinuteAligned(startsAt) || !isMinuteAligned(endsAt)) {
+                throw new IllegalArgumentException("Slot times must be aligned to whole minutes.");
+            }
+        }
+
+        private static boolean isMinuteAligned(Instant value) {
+            return value != null && value.getEpochSecond() % 60 == 0 && value.getNano() == 0;
+        }
+    }
+
     String createVenue(String name);
 
     VenuePage listVenues(int page, int size);
@@ -51,11 +65,15 @@ public interface VenueModule {
 
     boolean renameVenue(String venueId, String name);
 
-    SlotRequestResult requestSlot(String venueId, String eventId, Instant startsAt, Instant endsAt);
+    SlotRequestResult requestSlot(String eventId, Slot slot);
 
     Optional<VenueDayView> findDay(String venueId, LocalDate date);
 
-    void releaseSlot(String venueId, String eventId, Instant startsAt, Instant endsAt);
+    /**
+     * Removes one exact reservation during rollback or rescheduling. User-requested release and
+     * cancellation use {@link #releaseEventSlots(String)} instead.
+     */
+    void releaseReservation(String eventId, Slot slot);
 
     /** Removes the named orphan bookings from one Venue-Day. Safe to repeat. */
     void removeBookings(String venueId, Instant startsAt, Set<String> eventIds);
