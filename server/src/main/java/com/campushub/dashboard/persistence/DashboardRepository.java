@@ -1,16 +1,16 @@
 package com.campushub.dashboard.persistence;
 
-import com.campushub.dashboard.DashboardModule.ClubTotals;
+import com.campushub.dashboard.DashboardModule.ClubMonthTotals;
 import com.campushub.dashboard.DashboardModule.EventTotals;
 import com.campushub.dashboard.DashboardModule.ExcludedEvents;
 import com.campushub.dashboard.DashboardModule.MetricTotals;
-import com.campushub.dashboard.DashboardModule.MonthTotals;
+import com.campushub.dashboard.domain.ClubScope;
+import com.campushub.dashboard.domain.ClubScope.NamedClubs;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Set;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -20,17 +20,12 @@ import org.springframework.stereotype.Component;
 // Event document type: the dashboard is the one module the technical baseline lets read across a peer's
 // collection, and it pays for that by depending on field names rather than on a class it does not own.
 //
-// Two conventions hold across every pipeline below.
-//
 // **The population is a private constant of this class, not a parameter.** Every metric is computed
 // over Events where status is Published and endsAt falls inside the range — which itself never runs
 // past now, so "finished" needs no separate clause. A caller cannot widen it, which is the point: the
 // ADR fixed the denominators and then fixed the set they are computed over, and a filter would put
-// that back in the caller's hands.
-//
-// **A null {@code clubIds} means every Club.** That is the University Admin's unscoped read, and it is
-// the only way to get one — an empty set matches nothing, so a Club Officer with no grants gets zeroes
-// rather than the campus. See docs/adr/08-define-roles-and-resource-authorization.md.
+// that back in the caller's hands. Club scoping is the one thing a caller does choose, and it arrives
+// as a {@link ClubScope} rather than as a nullable set.
 @Component
 public class DashboardRepository {
 
@@ -38,7 +33,6 @@ public class DashboardRepository {
     private static final String PUBLISHED = "PUBLISHED";
     private static final String DRAFT = "DRAFT";
     private static final String CANCELLED = "CANCELLED";
-    private static final String IN_PROGRESS = "IN_PROGRESS";
     private static final String MANUAL = "MANUAL";
 
     private final MongoTemplate mongoTemplate;
@@ -59,18 +53,13 @@ public class DashboardRepository {
     }
 
     /** Every numerator and denominator in one pass over the population. */
-    public MetricTotals totals(Set<String> clubIds, Instant from, Instant to) {
-        Document group = new Document("_id", null)
-                .append("eventsRun", sum(1))
-                .append("capacity", sum("$capacity"))
-                .append("enrolled", sum(sizeOf("$enrolled")))
-                .append("attended", sum(sizeOf("$attendance")))
+    public MetricTotals totals(ClubScope scope, Instant from, Instant to) {
+        Document group = activityCounts(null)
                 .append("promoted", sum(intOrZero("$promotedCount")))
                 .append("everQueued", sum(intOrZero("$everQueuedCount")))
-                .append("unmetDemand", sum(sizeOf("$waitlist")))
                 .append("manualAttendance", sum(new Document("$size", manualAttendance())));
 
-        Document result = first(List.of(match(population(clubIds, from, to)), new Document("$group", group)));
+        Document result = first(List.of(match(population(scope, from, to)), new Document("$group", group)));
         return result == null
                 ? MetricTotals.empty()
                 : new MetricTotals(
@@ -85,55 +74,40 @@ public class DashboardRepository {
     }
 
     /**
-     * Club activity per calendar month, oldest first. The bucket is the month endsAt falls in, taken in
-     * the campus timezone — an Event that ends at 00:30 Dublin on 1 April belongs to April, and the
-     * timezone is where that becomes true. See docs/adr/15-define-http-api-and-time-contract.md.
+     * Club activity at the granularity the ADR defines it — per Club, per calendar month. One row is
+     * one Club's month; the trend line and the cross-club comparison are both rollups of these, done in
+     * the frontend's pure functions rather than by asking the database the same question twice.
+     *
+     * <p>The bucket is the month endsAt falls in, taken in the campus timezone: an Event that ends at
+     * 00:30 Dublin on 1 April belongs to April, and the timezone is where that becomes true. See
+     * docs/adr/15-define-http-api-and-time-contract.md.
      */
-    public List<MonthTotals> monthlyTotals(Set<String> clubIds, Instant from, Instant to, ZoneId zone) {
-        Document month = new Document(
-                "$dateToString",
-                new Document("format", "%Y-%m").append("date", "$endsAt").append("timezone", zone.getId()));
-        Document group = new Document("_id", month)
-                .append("eventsRun", sum(1))
-                .append("capacity", sum("$capacity"))
-                .append("enrolled", sum(sizeOf("$enrolled")))
-                .append("attended", sum(sizeOf("$attendance")));
+    public List<ClubMonthTotals> clubMonthTotals(ClubScope scope, Instant from, Instant to, ZoneId zone) {
+        Document bucket = new Document("clubId", "$clubId")
+                .append(
+                        "month",
+                        new Document(
+                                "$dateToString",
+                                new Document("format", "%Y-%m")
+                                        .append("date", "$endsAt")
+                                        .append("timezone", zone.getId())));
 
         return all(List.of(
-                        match(population(clubIds, from, to)),
-                        new Document("$group", group),
-                        new Document("$sort", new Document("_id", 1))))
+                        match(population(scope, from, to)),
+                        new Document("$group", activityCounts(bucket)),
+                        new Document("$sort", new Document("_id.clubId", 1).append("_id.month", 1))))
                 .stream()
-                .map(document -> new MonthTotals(
-                        document.getString("_id"),
-                        count(document, "eventsRun"),
-                        count(document, "capacity"),
-                        count(document, "enrolled"),
-                        count(document, "attended")))
-                .toList();
-    }
-
-    /** One row per Club that ran anything in the range. Ordering is the caller's business, not this one's. */
-    public List<ClubTotals> clubTotals(Set<String> clubIds, Instant from, Instant to) {
-        Document group = new Document("_id", "$clubId")
-                .append("eventsRun", sum(1))
-                .append("capacity", sum("$capacity"))
-                .append("enrolled", sum(sizeOf("$enrolled")))
-                .append("attended", sum(sizeOf("$attendance")))
-                .append("unmetDemand", sum(sizeOf("$waitlist")));
-
-        return all(List.of(
-                        match(population(clubIds, from, to)),
-                        new Document("$group", group),
-                        new Document("$sort", new Document("_id", 1))))
-                .stream()
-                .map(document -> new ClubTotals(
-                        document.getString("_id"),
-                        count(document, "eventsRun"),
-                        count(document, "capacity"),
-                        count(document, "enrolled"),
-                        count(document, "attended"),
-                        count(document, "unmetDemand")))
+                .map(document -> {
+                    Document key = document.get("_id", Document.class);
+                    return new ClubMonthTotals(
+                            key.getString("clubId"),
+                            key.getString("month"),
+                            count(document, "eventsRun"),
+                            count(document, "capacity"),
+                            count(document, "enrolled"),
+                            count(document, "attended"),
+                            count(document, "unmetDemand"));
+                })
                 .toList();
     }
 
@@ -141,7 +115,7 @@ public class DashboardRepository {
      * One row per finished Event, most recently finished first. Deliberately uncapped: the time range is
      * what bounds this, and a silent cap would be the same defect as a total that quietly omits rows.
      */
-    public List<EventTotals> eventTotals(Set<String> clubIds, Instant from, Instant to) {
+    public List<EventTotals> eventTotals(ClubScope scope, Instant from, Instant to) {
         Document project = new Document("title", 1)
                 .append("clubId", 1)
                 .append("endsAt", 1)
@@ -151,7 +125,7 @@ public class DashboardRepository {
                 .append("unmetDemand", sizeOf("$waitlist"));
 
         return all(List.of(
-                        match(population(clubIds, from, to)),
+                        match(population(scope, from, to)),
                         new Document("$project", project),
                         new Document("$sort", new Document("endsAt", -1))))
                 .stream()
@@ -168,55 +142,61 @@ public class DashboardRepository {
     }
 
     /**
-     * What the range covers but the population leaves out. Draft and Cancelled Events are counted where
-     * they would have ended; an Event is in progress when it has started and the range's end — which is
-     * never later than now — has arrived before its own.
+     * What the range covers but the population leaves out, grouped by the Status that got them left
+     * out. Draft and Cancelled Events are counted where they would have ended. A Published Event is in
+     * progress when it had started by the range's end — which is never later than now — and had not
+     * finished; no lower bound on startsAt, because an Event that began before the window and is still
+     * running is exactly the row that must not go missing from both the metrics and the count of what
+     * is missing from them.
      */
-    public ExcludedEvents excludedEvents(Set<String> clubIds, Instant from, Instant to) {
+    public ExcludedEvents excludedEvents(ClubScope scope, Instant from, Instant to) {
         Date start = Date.from(from);
         Date end = Date.from(to);
         Document notOffered = new Document("status", new Document("$in", List.of(DRAFT, CANCELLED)))
                 .append("endsAt", between(start, end));
         Document stillRunning = new Document("status", PUBLISHED)
                 .append("endsAt", new Document("$gt", end))
-                .append("startsAt", between(start, end));
+                .append("startsAt", new Document("$lte", end));
 
-        Document match = new Document("$or", List.of(notOffered, stillRunning));
-        if (clubIds != null) {
-            match.append("clubId", new Document("$in", List.copyOf(clubIds)));
-        }
-
-        Document reason = new Document(
-                "$switch",
-                new Document("branches", List.of(branch(DRAFT), branch(CANCELLED)))
-                        .append("default", IN_PROGRESS));
+        Document match = clubScoped(new Document("$or", List.of(notOffered, stillRunning)), scope);
+        Document group = new Document("_id", "$status").append("count", sum(1));
 
         long draft = 0;
         long cancelled = 0;
         long inProgress = 0;
-        for (Document document : all(List.of(
-                match(match), new Document("$group", new Document("_id", reason).append("count", sum(1)))))) {
+        for (Document document : all(List.of(match(match), new Document("$group", group)))) {
             long count = count(document, "count");
             switch (document.getString("_id")) {
                 case DRAFT -> draft = count;
                 case CANCELLED -> cancelled = count;
+                // The only Published Events this match admits are the running ones — the finished ones
+                // are the population itself, and they are matched by the query above, not by this one.
                 default -> inProgress = count;
             }
         }
         return new ExcludedEvents(draft, cancelled, inProgress);
     }
 
-    private static Document branch(String status) {
-        return new Document("case", new Document("$eq", List.of("$status", status))).append("then", status);
+    /** The four counts every activity rollup shares, grouped by {@code bucket} ({@code null} for one row). */
+    private static Document activityCounts(Object bucket) {
+        return new Document("_id", bucket)
+                .append("eventsRun", sum(1))
+                .append("capacity", sum("$capacity"))
+                .append("enrolled", sum(sizeOf("$enrolled")))
+                .append("attended", sum(sizeOf("$attendance")))
+                .append("unmetDemand", sum(sizeOf("$waitlist")));
     }
 
-    private static Document population(Set<String> clubIds, Instant from, Instant to) {
-        Document match =
-                new Document("status", PUBLISHED).append("endsAt", between(Date.from(from), Date.from(to)));
-        if (clubIds != null) {
-            match.append("clubId", new Document("$in", List.copyOf(clubIds)));
-        }
-        return match;
+    private static Document population(ClubScope scope, Instant from, Instant to) {
+        return clubScoped(
+                new Document("status", PUBLISHED).append("endsAt", between(Date.from(from), Date.from(to))),
+                scope);
+    }
+
+    private static Document clubScoped(Document match, ClubScope scope) {
+        return scope instanceof NamedClubs named
+                ? match.append("clubId", new Document("$in", List.copyOf(named.clubIds())))
+                : match;
     }
 
     private static Document between(Date from, Date to) {

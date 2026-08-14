@@ -42,7 +42,7 @@ class DashboardRangeTest {
     }
 
     @Test
-    void aBackwardsRangeCollapsesToAnEmptyOneRatherThanMatchingEverything() {
+    void aBackwardsRangeCollapsesToItsEndRatherThanMatchingEverything() {
         DashboardRange range = DashboardRange.resolve(
                 Instant.parse("2026-07-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"), NOW, DUBLIN);
 

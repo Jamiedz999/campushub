@@ -32,7 +32,7 @@ export function EnrolledAgainstAttendedChart({ events }: { events: EventTotals[]
       {series.trimmed > 0 && (
         <p className="text-sm text-slate-600">
           Showing the {series.titles.length} most recently finished Events; {series.trimmed} more are in
-          this range. Narrow the range to see them.
+          this range and every one of them is in the table below.
         </p>
       )}
     </div>

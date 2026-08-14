@@ -80,7 +80,7 @@ class DashboardController {
     // wider than the numbers beside it.
     private static Set<String> clubIdsIn(DashboardView view) {
         return Stream.concat(
-                        view.clubs().stream().map(club -> club.clubId()),
+                        view.clubMonths().stream().map(row -> row.clubId()),
                         view.events().stream().map(event -> event.clubId()))
                 .collect(Collectors.toUnmodifiableSet());
     }

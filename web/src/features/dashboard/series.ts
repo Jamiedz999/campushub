@@ -1,5 +1,11 @@
 import { attendanceRate, fillRate } from "./metrics";
-import type { ClubTotals, EventTotals, ExcludedEvents, MonthTotals } from "./types";
+import type {
+  ClubMonthTotals,
+  ClubTotals,
+  EventTotals,
+  ExcludedEvents,
+  MonthTotals,
+} from "./types";
 
 /**
  * Turning the API's counts into the series each chart draws. Pure, and unit tested to the full bar —
@@ -37,6 +43,63 @@ export function percentTooltip(value: unknown): string {
   return typeof value === "number" ? `${value}%` : "—";
 }
 
+/**
+ * Club activity summed across Clubs — one row per month, oldest first. The API sends activity at
+ * (Club, month) because that is the grain the ADR defines it at; the trend line wants one line for the
+ * whole scope, and this is the sum that gets there.
+ */
+export function monthTotals(rows: ClubMonthTotals[]): MonthTotals[] {
+  const months = new Map<string, MonthTotals>();
+  for (const row of rows) {
+    const running = months.get(row.month) ?? {
+      month: row.month,
+      eventsRun: 0,
+      capacity: 0,
+      enrolled: 0,
+      attended: 0,
+    };
+    months.set(row.month, {
+      month: row.month,
+      eventsRun: running.eventsRun + row.eventsRun,
+      capacity: running.capacity + row.capacity,
+      enrolled: running.enrolled + row.enrolled,
+      attended: running.attended + row.attended,
+    });
+  }
+  return [...months.values()].sort((left, right) => left.month.localeCompare(right.month));
+}
+
+/** The same activity summed across months instead — one row per Club, for the comparison. */
+export function clubTotals(rows: ClubMonthTotals[]): ClubTotals[] {
+  const clubs = new Map<string, ClubTotals>();
+  for (const row of rows) {
+    const running = clubs.get(row.clubId) ?? {
+      clubId: row.clubId,
+      clubName: row.clubName,
+      eventsRun: 0,
+      capacity: 0,
+      enrolled: 0,
+      attended: 0,
+      unmetDemand: 0,
+    };
+    clubs.set(row.clubId, {
+      clubId: row.clubId,
+      clubName: row.clubName,
+      eventsRun: running.eventsRun + row.eventsRun,
+      capacity: running.capacity + row.capacity,
+      enrolled: running.enrolled + row.enrolled,
+      attended: running.attended + row.attended,
+      unmetDemand: running.unmetDemand + row.unmetDemand,
+    });
+  }
+  return [...clubs.values()];
+}
+
+/** One Club's months, oldest first — the Club's own trend, out of the same rows. */
+export function clubTrend(rows: ClubMonthTotals[], clubId: string): MonthTotals[] {
+  return monthTotals(rows.filter((row) => row.clubId === clubId));
+}
+
 export interface RatesOverTime {
   months: string[];
   /** Whole percents, with null where a month had nothing to divide by — a gap, not a crash to zero. */
@@ -47,8 +110,8 @@ export interface RatesOverTime {
 export function ratesOverTime(months: MonthTotals[]): RatesOverTime {
   return {
     months: months.map((month) => monthLabel(month.month)),
-    fillRate: months.map((month) => percent(fillRate(asTotals(month)))),
-    attendanceRate: months.map((month) => percent(attendanceRate(asTotals(month)))),
+    fillRate: months.map((month) => percent(fillRate(month))),
+    attendanceRate: months.map((month) => percent(attendanceRate(month))),
   };
 }
 
@@ -136,18 +199,4 @@ function notice(count: number, singular: string, plural: string): string | null 
 
 function percent(value: number | null): number | null {
   return value === null ? null : Math.round(value * 100);
-}
-
-// A month's counts are a population of their own, so the same rate functions apply to them unchanged.
-function asTotals(month: MonthTotals) {
-  return {
-    eventsRun: month.eventsRun,
-    capacity: month.capacity,
-    enrolled: month.enrolled,
-    attended: month.attended,
-    promoted: 0,
-    everQueued: 0,
-    unmetDemand: 0,
-    manualAttendance: 0,
-  };
 }

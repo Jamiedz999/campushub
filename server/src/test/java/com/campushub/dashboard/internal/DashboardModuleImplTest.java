@@ -6,12 +6,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.campushub.dashboard.DashboardModule.ClubTotals;
+import com.campushub.dashboard.DashboardModule.ClubMonthTotals;
 import com.campushub.dashboard.DashboardModule.DashboardView;
 import com.campushub.dashboard.DashboardModule.EventTotals;
 import com.campushub.dashboard.DashboardModule.ExcludedEvents;
 import com.campushub.dashboard.DashboardModule.MetricTotals;
-import com.campushub.dashboard.DashboardModule.MonthTotals;
+import com.campushub.dashboard.domain.ClubScope;
 import com.campushub.dashboard.persistence.DashboardRepository;
 import com.campushub.shared.CampusProperties;
 import java.time.Clock;
@@ -33,6 +33,7 @@ class DashboardModuleImplTest {
     private static final Instant NOW = Instant.parse("2026-08-14T10:15:00Z");
     private static final Instant DEFAULT_FROM = Instant.parse("2025-08-31T23:00:00Z");
     private static final Set<String> CLUB_A = Set.of("club-a");
+    private static final ClubScope CLUB_A_SCOPE = ClubScope.of(CLUB_A);
 
     @Mock
     private DashboardRepository repository;
@@ -53,34 +54,30 @@ class DashboardModuleImplTest {
 
         module.findForClubs(CLUB_A, from, to);
 
-        verify(repository).totals(CLUB_A, from, to);
-        verify(repository).monthlyTotals(CLUB_A, from, to, DUBLIN);
-        verify(repository).clubTotals(CLUB_A, from, to);
-        verify(repository).eventTotals(CLUB_A, from, to);
-        verify(repository).excludedEvents(CLUB_A, from, to);
+        verify(repository).totals(CLUB_A_SCOPE, from, to);
+        verify(repository).clubMonthTotals(CLUB_A_SCOPE, from, to, DUBLIN);
+        verify(repository).eventTotals(CLUB_A_SCOPE, from, to);
+        verify(repository).excludedEvents(CLUB_A_SCOPE, from, to);
     }
 
     @Test
     void theCrossClubViewIsTheOnlyUnscopedReadAndTheViewReportsItsOwnRange() {
         when(repository.totals(any(), any(), any())).thenReturn(new MetricTotals(4, 100, 90, 70, 3, 9, 8, 6));
-        when(repository.monthlyTotals(any(), any(), any(), any()))
-                .thenReturn(List.of(new MonthTotals("2026-07", 4, 100, 90, 70)));
-        when(repository.clubTotals(any(), any(), any()))
-                .thenReturn(List.of(new ClubTotals("club-a", 4, 100, 90, 70, 8)));
+        when(repository.clubMonthTotals(any(), any(), any(), any()))
+                .thenReturn(List.of(new ClubMonthTotals("club-a", "2026-07", 4, 100, 90, 70, 8)));
         when(repository.eventTotals(any(), any(), any()))
                 .thenReturn(List.of(new EventTotals("event-1", "Talk", "club-a", NOW, 25, 22, 18, 2)));
         when(repository.excludedEvents(any(), any(), any())).thenReturn(new ExcludedEvents(1, 2, 0));
 
         DashboardView view = module.findAcrossAllClubs(null, null);
 
-        ArgumentCaptor<Set<String>> scope = ArgumentCaptor.captor();
+        ArgumentCaptor<ClubScope> scope = ArgumentCaptor.captor();
         verify(repository).totals(scope.capture(), eq(DEFAULT_FROM), eq(NOW));
-        assertThat(scope.getValue()).isNull();
+        assertThat(scope.getValue()).isEqualTo(ClubScope.allClubs());
         assertThat(view.from()).isEqualTo(DEFAULT_FROM);
         assertThat(view.to()).isEqualTo(NOW);
         assertThat(view.totals().eventsRun()).isEqualTo(4);
-        assertThat(view.months()).hasSize(1);
-        assertThat(view.clubs()).hasSize(1);
+        assertThat(view.clubMonths()).hasSize(1);
         assertThat(view.events()).hasSize(1);
         assertThat(view.excluded()).isEqualTo(new ExcludedEvents(1, 2, 0));
     }
@@ -89,6 +86,7 @@ class DashboardModuleImplTest {
     void aClubScopedReadIsNeverTheUnscopedOneEvenWhenTheCallerHasNoGrants() {
         module.findForClubs(Set.of(), null, null);
 
-        verify(repository).totals(Set.of(), DEFAULT_FROM, NOW);
+        // Named-but-empty, not "every Club": an Officer holding no grants sees nothing, not the campus.
+        verify(repository).totals(ClubScope.of(Set.of()), DEFAULT_FROM, NOW);
     }
 }

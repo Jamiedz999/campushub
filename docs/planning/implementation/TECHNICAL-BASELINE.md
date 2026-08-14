@@ -18,7 +18,7 @@ This is the single implementation source for the Core stack, repository shape an
 | Sessions | Spring Security form login with opaque same-origin sessions, Spring Session MongoDB, secure cookies, CSRF enabled. **No JWT** |
 | API docs | springdoc-openapi, served at `/swagger-ui` and guarded by a test that fails if the document stops generating |
 | Frontend | Node 24 LTS, React 19.2 current patch, strict TypeScript, Vite 8.1, React Router, TanStack Query over **axios**, Zustand, Tailwind CSS |
-| Charts | Apache ECharts via `echarts-for-react` |
+| Charts | Apache ECharts via `echarts-for-react`, registered through `echarts/core` so only the used chart types ship, on a route loaded on demand. `tslib` is a direct dependency nothing imports directly: `echarts-for-react` requires it and does not declare it, so the build cannot resolve it otherwise |
 | Realtime | Spring WebSocket (STOMP-free, raw `WebSocketHandler`) with an **in-process broadcast**. No MongoDB change streams |
 | Structure | **Spring Modulith 2.1** verifying module boundaries and generating the module documentation, plus custom **ArchUnit** rules for document ownership. ESLint `import/no-restricted-paths` on the frontend |
 | Verification | JUnit 5, AssertJ, Mockito, Testcontainers MongoDB, Vitest, Testing Library, **Cypress**. Surefire runs `*Test`, Failsafe runs `*IntegrationTest` |

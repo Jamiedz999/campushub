@@ -51,14 +51,24 @@ public interface DashboardModule {
     }
 
     /**
-     * One calendar month of club activity. {@code month} is {@code YYYY-MM} in the campus timezone,
-     * bucketed by the Event's endsAt — the moment it entered the population.
+     * Club activity at the granularity the ADR defines it: one Club, one calendar month. {@code month}
+     * is {@code YYYY-MM} in the campus timezone, bucketed by the Event's endsAt — the moment it entered
+     * the population.
+     *
+     * <p>The trend line wants these summed across Clubs and the cross-club comparison wants them summed
+     * across months, and both sums are pure data-shaping the frontend already owns. Sending the finer
+     * grain once is what lets a University Admin's view answer either question without the database
+     * being asked the same thing twice — and it is the grain "Events run, total enrolled and total
+     * attended per Club, per month" actually names.
      */
-    record MonthTotals(String month, long eventsRun, long capacity, long enrolled, long attended) {}
-
-    /** One Club's activity over the whole range, for the cross-club comparison. */
-    record ClubTotals(
-            String clubId, long eventsRun, long capacity, long enrolled, long attended, long unmetDemand) {}
+    record ClubMonthTotals(
+            String clubId,
+            String month,
+            long eventsRun,
+            long capacity,
+            long enrolled,
+            long attended,
+            long unmetDemand) {}
 
     /** One finished Event. The grouped bar and the unmet-demand table are both built from these. */
     record EventTotals(
@@ -91,14 +101,12 @@ public interface DashboardModule {
             Instant from,
             Instant to,
             MetricTotals totals,
-            List<MonthTotals> months,
-            List<ClubTotals> clubs,
+            List<ClubMonthTotals> clubMonths,
             List<EventTotals> events,
             ExcludedEvents excluded) {
 
         public DashboardView {
-            months = List.copyOf(months);
-            clubs = List.copyOf(clubs);
+            clubMonths = List.copyOf(clubMonths);
             events = List.copyOf(events);
         }
     }

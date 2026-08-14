@@ -1,14 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
   clubComparison,
+  clubTotals,
+  clubTrend,
   enrolledAgainstAttended,
   excludedNotices,
   monthLabel,
+  monthTotals,
   percentTooltip,
   ratesOverTime,
   unmetDemandRows,
 } from "./series";
-import type { ClubTotals, EventTotals, MonthTotals } from "./types";
+import type { ClubMonthTotals, ClubTotals, EventTotals, MonthTotals } from "./types";
+
+function clubMonth(
+  overrides: Partial<ClubMonthTotals> & { clubId: string; month: string },
+): ClubMonthTotals {
+  return {
+    clubName: overrides.clubId,
+    eventsRun: 1,
+    capacity: 100,
+    enrolled: 80,
+    attended: 60,
+    unmetDemand: 0,
+    ...overrides,
+  };
+}
 
 function month(overrides: Partial<MonthTotals> & { month: string }): MonthTotals {
   return { eventsRun: 1, capacity: 100, enrolled: 80, attended: 60, ...overrides };
@@ -39,6 +56,87 @@ function event(overrides: Partial<EventTotals> & { eventId: string }): EventTota
     ...overrides,
   };
 }
+
+// Club activity arrives per Club per month, which is the grain ADR 09 defines it at. Both charts want
+// a different rollup of it, and getting either sum wrong would make two numbers on one screen disagree.
+describe("monthTotals", () => {
+  it("sums every Club into one row per month, oldest first", () => {
+    const months = monthTotals([
+      clubMonth({ clubId: "club-b", month: "2026-04", capacity: 30, enrolled: 12, attended: 9 }),
+      clubMonth({ clubId: "club-a", month: "2026-03", capacity: 100, enrolled: 80, attended: 60 }),
+      clubMonth({ clubId: "club-a", month: "2026-04", capacity: 50, enrolled: 50, attended: 40 }),
+    ]);
+
+    expect(months).toEqual([
+      { month: "2026-03", eventsRun: 1, capacity: 100, enrolled: 80, attended: 60 },
+      { month: "2026-04", eventsRun: 2, capacity: 80, enrolled: 62, attended: 49 },
+    ]);
+  });
+
+  it("is empty when nothing ran", () => {
+    expect(monthTotals([])).toEqual([]);
+  });
+});
+
+describe("clubTotals", () => {
+  it("sums every month into one row per Club, keeping the Waitlist lengths", () => {
+    const clubs = clubTotals([
+      clubMonth({ clubId: "club-a", clubName: "Robotics", month: "2026-03", unmetDemand: 5 }),
+      clubMonth({ clubId: "club-a", clubName: "Robotics", month: "2026-04", unmetDemand: 9 }),
+      clubMonth({ clubId: "club-b", clubName: "Choir", month: "2026-04" }),
+    ]);
+
+    expect(clubs).toEqual([
+      {
+        clubId: "club-a",
+        clubName: "Robotics",
+        eventsRun: 2,
+        capacity: 200,
+        enrolled: 160,
+        attended: 120,
+        unmetDemand: 14,
+      },
+      {
+        clubId: "club-b",
+        clubName: "Choir",
+        eventsRun: 1,
+        capacity: 100,
+        enrolled: 80,
+        attended: 60,
+        unmetDemand: 0,
+      },
+    ]);
+  });
+
+  it("adds up to the same activity whichever way it is summed", () => {
+    const rows = [
+      clubMonth({ clubId: "club-a", month: "2026-03" }),
+      clubMonth({ clubId: "club-b", month: "2026-03" }),
+      clubMonth({ clubId: "club-b", month: "2026-04" }),
+    ];
+
+    const byMonth = monthTotals(rows).reduce((running, month) => running + month.attended, 0);
+    const byClub = clubTotals(rows).reduce((running, club) => running + club.attended, 0);
+
+    expect(byMonth).toBe(byClub);
+  });
+});
+
+describe("clubTrend", () => {
+  it("is one Club's own months, and nobody else's", () => {
+    const trend = clubTrend(
+      [
+        clubMonth({ clubId: "club-a", month: "2026-03", attended: 60 }),
+        clubMonth({ clubId: "club-b", month: "2026-03", attended: 9 }),
+      ],
+      "club-a",
+    );
+
+    expect(trend).toEqual([
+      { month: "2026-03", eventsRun: 1, capacity: 100, enrolled: 80, attended: 60 },
+    ]);
+  });
+});
 
 describe("monthLabel", () => {
   it("turns the bucket key into something a person reads", () => {

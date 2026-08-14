@@ -1,4 +1,4 @@
-import { formatCount, formatRate, waitlistConversion } from "../metrics";
+import { formatCount, formatRate, waitlistAbandoned, waitlistConversion } from "../metrics";
 import type { MetricTotals } from "../types";
 
 /**
@@ -10,7 +10,7 @@ import type { MetricTotals } from "../types";
  * promoted over the queue's remaining length.
  */
 export function WaitlistConversionFigure({ totals }: { totals: MetricTotals }) {
-  const left = totals.everQueued - totals.promoted - totals.unmetDemand;
+  const left = waitlistAbandoned(totals);
 
   return (
     <section aria-label="Waitlist conversion" className="rounded border p-4">

@@ -3,11 +3,11 @@ package com.campushub.dashboard.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
-import com.campushub.dashboard.DashboardModule.ClubTotals;
+import com.campushub.dashboard.DashboardModule.ClubMonthTotals;
 import com.campushub.dashboard.DashboardModule.EventTotals;
 import com.campushub.dashboard.DashboardModule.ExcludedEvents;
 import com.campushub.dashboard.DashboardModule.MetricTotals;
-import com.campushub.dashboard.DashboardModule.MonthTotals;
+import com.campushub.dashboard.domain.ClubScope;
 import com.mongodb.client.MongoClients;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -42,7 +42,10 @@ class DashboardRepositoryIntegrationTest {
     private static final ZoneId DUBLIN = ZoneId.of("Europe/Dublin");
     private static final Instant FROM = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant NOW = Instant.parse("2026-08-14T10:15:00Z");
-    private static final Set<String> BOTH_CLUBS = Set.of("club-a", "club-b");
+    private static final ClubScope EVERY_CLUB = ClubScope.allClubs();
+    private static final ClubScope BOTH_CLUBS = ClubScope.of(Set.of("club-a", "club-b"));
+    private static final ClubScope CLUB_A = ClubScope.of(Set.of("club-a"));
+    private static final ClubScope NO_CLUBS = ClubScope.of(Set.of());
 
     private MongoTemplate mongoTemplate;
     private DashboardRepository repository;
@@ -59,7 +62,7 @@ class DashboardRepositoryIntegrationTest {
     void everyTotalMatchesTheHandComputedFixture() {
         seedPopulation();
 
-        MetricTotals totals = repository.totals(null, FROM, NOW);
+        MetricTotals totals = repository.totals(EVERY_CLUB, FROM, NOW);
 
         // Three finished Published Events: 100 + 50 + 30 seats, 80 + 50 + 12 enrolled,
         // 60 + 40 + 9 attended, of which 10 + 0 + 5 were manual overrides.
@@ -78,16 +81,16 @@ class DashboardRepositoryIntegrationTest {
     @Test
     void aCancelledEventAndADraftEventChangeNoNumberAndAreCountedInstead() {
         seedPopulation();
-        MetricTotals withoutExclusions = repository.totals(null, FROM, NOW);
-        List<ClubTotals> clubsWithoutExclusions = repository.clubTotals(null, FROM, NOW);
+        MetricTotals withoutExclusions = repository.totals(EVERY_CLUB, FROM, NOW);
+        List<ClubMonthTotals> activityWithoutExclusions = repository.clubMonthTotals(EVERY_CLUB, FROM, NOW, DUBLIN);
 
         seedExclusions();
 
         // The Cancelled Event carries 40 enrolled and 20 queued that never had the chance to attend, and
         // the Draft was never offered to anyone. Neither may move a single figure.
-        assertThat(repository.totals(null, FROM, NOW)).isEqualTo(withoutExclusions);
-        assertThat(repository.clubTotals(null, FROM, NOW)).isEqualTo(clubsWithoutExclusions);
-        assertThat(repository.excludedEvents(null, FROM, NOW)).isEqualTo(new ExcludedEvents(1, 1, 1));
+        assertThat(repository.totals(EVERY_CLUB, FROM, NOW)).isEqualTo(withoutExclusions);
+        assertThat(repository.clubMonthTotals(EVERY_CLUB, FROM, NOW, DUBLIN)).isEqualTo(activityWithoutExclusions);
+        assertThat(repository.excludedEvents(EVERY_CLUB, FROM, NOW)).isEqualTo(new ExcludedEvents(1, 1, 1));
     }
 
     @Test
@@ -97,7 +100,7 @@ class DashboardRepositoryIntegrationTest {
         // where the denominator was promoted + waitlist and so came to 11 instead of 12.
         insertEvent(published("club-a", "Robotics talk", "2026-03-10T20:00:00Z", 100, 80, 60, 10, 5, 6, 12));
 
-        MetricTotals totals = repository.totals(null, FROM, NOW);
+        MetricTotals totals = repository.totals(EVERY_CLUB, FROM, NOW);
 
         assertThat(totals.everQueued()).isEqualTo(12);
         assertThat(totals.promoted()).isEqualTo(6);
@@ -110,21 +113,21 @@ class DashboardRepositoryIntegrationTest {
         seedPopulation();
         seedExclusions();
 
-        MetricTotals clubA = repository.totals(Set.of("club-a"), FROM, NOW);
+        MetricTotals clubA = repository.totals(CLUB_A, FROM, NOW);
 
         // club-a's two finished Events only: 100 + 50 seats, 80 + 50 enrolled, 60 + 40 attended.
         assertThat(clubA.eventsRun()).isEqualTo(2);
         assertThat(clubA.capacity()).isEqualTo(150);
         assertThat(clubA.enrolled()).isEqualTo(130);
         assertThat(clubA.attended()).isEqualTo(100);
-        assertThat(repository.clubTotals(Set.of("club-a"), FROM, NOW))
-                .extracting(ClubTotals::clubId)
-                .containsExactly("club-a");
-        assertThat(repository.eventTotals(Set.of("club-a"), FROM, NOW))
+        assertThat(repository.clubMonthTotals(CLUB_A, FROM, NOW, DUBLIN))
+                .extracting(ClubMonthTotals::clubId)
+                .containsOnly("club-a");
+        assertThat(repository.eventTotals(CLUB_A, FROM, NOW))
                 .extracting(EventTotals::clubId)
                 .containsOnly("club-a");
         // club-b's still-running Event is another Club's excluded row and must not be counted either.
-        assertThat(repository.excludedEvents(Set.of("club-a"), FROM, NOW))
+        assertThat(repository.excludedEvents(CLUB_A, FROM, NOW))
                 .isEqualTo(new ExcludedEvents(1, 1, 0));
     }
 
@@ -132,37 +135,35 @@ class DashboardRepositoryIntegrationTest {
     void anOfficerWithNoGrantsSeesNothingRatherThanEverything() {
         seedPopulation();
 
-        assertThat(repository.totals(Set.of(), FROM, NOW)).isEqualTo(MetricTotals.empty());
-        assertThat(repository.clubTotals(Set.of(), FROM, NOW)).isEmpty();
-        assertThat(repository.eventTotals(Set.of(), FROM, NOW)).isEmpty();
-        assertThat(repository.excludedEvents(Set.of(), FROM, NOW)).isEqualTo(ExcludedEvents.none());
+        assertThat(repository.totals(NO_CLUBS, FROM, NOW)).isEqualTo(MetricTotals.empty());
+        assertThat(repository.clubMonthTotals(NO_CLUBS, FROM, NOW, DUBLIN)).isEmpty();
+        assertThat(repository.eventTotals(NO_CLUBS, FROM, NOW)).isEmpty();
+        assertThat(repository.excludedEvents(NO_CLUBS, FROM, NOW)).isEqualTo(ExcludedEvents.none());
     }
 
     @Test
-    void clubActivityIsBucketedByTheMonthTheEventEndedInTheCampusTimezone() {
+    void clubActivityIsOneRowPerClubPerMonth() {
         seedPopulation();
+        seedExclusions();
+
+        // Robotics ended in March and Hack night in April, both club-a; Choir is club-b's one April
+        // Event. Three Clubs' worth of months would collapse into two rows if either dimension were
+        // dropped, which is what "per Club, per month" is there to prevent.
+        assertThat(repository.clubMonthTotals(BOTH_CLUBS, FROM, NOW, DUBLIN))
+                .containsExactly(
+                        new ClubMonthTotals("club-a", "2026-03", 1, 100, 80, 60, 5),
+                        new ClubMonthTotals("club-a", "2026-04", 1, 50, 50, 40, 9),
+                        new ClubMonthTotals("club-b", "2026-04", 1, 30, 12, 9, 0));
+    }
+
+    @Test
+    void aMonthBucketIsTheOneTheEventEndedInOnTheCampusClock() {
         // 00:30 Dublin on 1 May is 23:30 UTC on 30 April. It belongs to May, and the timezone is the only
         // thing that makes that true.
         insertEvent(published("club-b", "Late finish", "2026-04-30T23:30:00Z", 10, 4, 3, 0, 0, 0, 0));
 
-        List<MonthTotals> months = repository.monthlyTotals(BOTH_CLUBS, FROM, NOW, DUBLIN);
-
-        assertThat(months)
-                .containsExactly(
-                        new MonthTotals("2026-03", 1, 100, 80, 60),
-                        new MonthTotals("2026-04", 2, 80, 62, 49),
-                        new MonthTotals("2026-05", 1, 10, 4, 3));
-    }
-
-    @Test
-    void theClubComparisonHasOneRowPerClubThatRanSomething() {
-        seedPopulation();
-        seedExclusions();
-
-        assertThat(repository.clubTotals(BOTH_CLUBS, FROM, NOW))
-                .containsExactly(
-                        new ClubTotals("club-a", 2, 150, 130, 100, 14),
-                        new ClubTotals("club-b", 1, 30, 12, 9, 0));
+        assertThat(repository.clubMonthTotals(BOTH_CLUBS, FROM, NOW, DUBLIN))
+                .containsExactly(new ClubMonthTotals("club-b", "2026-05", 1, 10, 4, 3, 0));
     }
 
     @Test
@@ -182,12 +183,33 @@ class DashboardRepositoryIntegrationTest {
     }
 
     @Test
+    void anEventThatStartedBeforeTheRangeAndHasNotFinishedIsStillCountedAsExcluded() {
+        // The row that would otherwise go missing twice over: absent from every metric because it has
+        // not finished, and absent from the count of what is missing because it did not start here.
+        Document longRunning = published("club-a", "Reading week", "2026-08-20T18:00:00Z", 30, 20, 0, 0, 0, 0, 0)
+                .append("startsAt", Date.from(Instant.parse("2025-12-01T09:00:00Z")));
+        insertEvent(longRunning);
+
+        assertThat(repository.excludedEvents(EVERY_CLUB, FROM, NOW)).isEqualTo(new ExcludedEvents(0, 0, 1));
+    }
+
+    @Test
+    void anEventThatHasNotStartedYetIsNeitherCountedNorReportedAsMissing() {
+        // Nothing about it is missing: it was never going to be in a window that ends now.
+        Document notYet = published("club-a", "Next term", "2026-10-01T18:00:00Z", 30, 20, 0, 0, 0, 0, 0)
+                .append("startsAt", Date.from(Instant.parse("2026-10-01T16:00:00Z")));
+        insertEvent(notYet);
+
+        assertThat(repository.excludedEvents(EVERY_CLUB, FROM, NOW)).isEqualTo(ExcludedEvents.none());
+    }
+
+    @Test
     void anEventThatEndedOutsideTheRangeIsNotInAnyOfIt() {
         seedPopulation();
         insertEvent(published("club-a", "Last year", "2025-06-01T20:00:00Z", 999, 999, 999, 999, 999, 999, 999));
 
-        assertThat(repository.totals(null, FROM, NOW).eventsRun()).isEqualTo(3);
-        assertThat(repository.eventTotals(null, FROM, NOW)).hasSize(3);
+        assertThat(repository.totals(EVERY_CLUB, FROM, NOW).eventsRun()).isEqualTo(3);
+        assertThat(repository.eventTotals(EVERY_CLUB, FROM, NOW)).hasSize(3);
     }
 
     @Test
@@ -201,10 +223,10 @@ class DashboardRepositoryIntegrationTest {
                 .append("capacity", 40);
         insertEvent(legacy);
 
-        MetricTotals totals = repository.totals(null, FROM, NOW);
+        MetricTotals totals = repository.totals(EVERY_CLUB, FROM, NOW);
 
         assertThat(totals).isEqualTo(new MetricTotals(1, 40, 0, 0, 0, 0, 0, 0));
-        assertThat(repository.eventTotals(null, FROM, NOW))
+        assertThat(repository.eventTotals(EVERY_CLUB, FROM, NOW))
                 .extracting(EventTotals::enrolled, EventTotals::attended, EventTotals::unmetDemand)
                 .containsExactly(tuple(0L, 0L, 0L));
     }

@@ -2,6 +2,7 @@ package com.campushub.dashboard.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.campushub.dashboard.domain.ClubScope;
 import com.mongodb.client.MongoClients;
 import java.time.Duration;
 import java.time.Instant;
@@ -78,13 +79,13 @@ class DashboardPerformanceIntegrationTest {
         assertThat(Duration.ofMillis(median)).isLessThan(THRESHOLD);
     }
 
-    // All five pipelines, which is what one page load actually costs.
+    // All four pipelines, which is what one page load actually costs.
     private void readEveryMetric() {
-        repository.totals(null, FROM, TO);
-        repository.monthlyTotals(null, FROM, TO, DUBLIN);
-        repository.clubTotals(null, FROM, TO);
-        repository.eventTotals(null, FROM, TO);
-        repository.excludedEvents(null, FROM, TO);
+        ClubScope everyClub = ClubScope.allClubs();
+        repository.totals(everyClub, FROM, TO);
+        repository.clubMonthTotals(everyClub, FROM, TO, DUBLIN);
+        repository.eventTotals(everyClub, FROM, TO);
+        repository.excludedEvents(everyClub, FROM, TO);
     }
 
     // Spread across twelve months and twenty Clubs, with one Event in ten Cancelled so the excluded

@@ -86,6 +86,36 @@ describe("EventsBrowsePage", () => {
     expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
   });
 
+  function mockBrowse() {
+    vi.spyOn(httpClient, "get").mockResolvedValue(
+      axiosResponse({ items: [item({})], page: 0, size: 20, total: 1 }),
+    );
+  }
+
+  it("offers the dashboard only to accounts that have one", async () => {
+    // The dashboard is scoped to the Clubs an account officers, so for a plain Student the endpoint
+    // 404s. A link that always leads to "there is nothing here for you" is worse than no link.
+    mockBrowse();
+    renderPage();
+
+    expect(await screen.findByRole("link", { name: "My events" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("offers the dashboard to a Club Officer", async () => {
+    mockBrowse();
+    renderPage({ ...STUDENT, officerClubIds: ["club-1"] });
+
+    expect(await screen.findByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("offers the dashboard to a University Admin who officers nothing", async () => {
+    mockBrowse();
+    renderPage({ ...STUDENT, systemRole: "UNIVERSITY_ADMIN" });
+
+    expect(await screen.findByRole("link", { name: "Dashboard" })).toBeVisible();
+  });
+
   it("links an Officer to Venue and capacity management only for their own Clubs Event", async () => {
     vi.spyOn(httpClient, "get").mockResolvedValue(
       axiosResponse({

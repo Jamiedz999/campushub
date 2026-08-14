@@ -9,12 +9,11 @@ import static org.mockito.Mockito.when;
 
 import com.campushub.club.ClubModule;
 import com.campushub.dashboard.DashboardModule;
-import com.campushub.dashboard.DashboardModule.ClubTotals;
+import com.campushub.dashboard.DashboardModule.ClubMonthTotals;
 import com.campushub.dashboard.DashboardModule.DashboardView;
 import com.campushub.dashboard.DashboardModule.EventTotals;
 import com.campushub.dashboard.DashboardModule.ExcludedEvents;
 import com.campushub.dashboard.DashboardModule.MetricTotals;
-import com.campushub.dashboard.DashboardModule.MonthTotals;
 import com.campushub.dashboard.web.DashboardResponse.DashboardScope;
 import com.campushub.identityaccess.IdentityAccessModule;
 import com.campushub.identityaccess.domain.CurrentActor;
@@ -62,9 +61,9 @@ class DashboardControllerTest {
         DashboardResponse response = controller.read(null, FROM, TO);
 
         assertThat(response.scope()).isEqualTo(DashboardScope.CLUB);
-        assertThat(response.clubs())
+        assertThat(response.clubMonths())
                 .singleElement()
-                .extracting(DashboardResponse.Club::clubName)
+                .extracting(DashboardResponse.ClubMonth::clubName)
                 .isEqualTo("Robotics Society");
         assertThat(response.events())
                 .singleElement()
@@ -126,11 +125,13 @@ class DashboardControllerTest {
 
         DashboardResponse response = controller.read(null, null, null);
 
-        assertThat(response.clubs())
+        assertThat(response.clubMonths())
                 .singleElement()
-                .extracting(DashboardResponse.Club::clubName)
+                .extracting(DashboardResponse.ClubMonth::clubName)
                 .isEqualTo("club-a");
-        assertThat(response.months()).containsExactly(new DashboardResponse.Month("2026-03", 1, 25, 22, 18));
+        assertThat(response.clubMonths())
+                .containsExactly(
+                        new DashboardResponse.ClubMonth("club-a", "club-a", "2026-03", 1, 25, 22, 18, 2));
         assertThat(response.from()).isEqualTo(FROM);
         assertThat(response.to()).isEqualTo(TO);
     }
@@ -140,8 +141,7 @@ class DashboardControllerTest {
                 FROM,
                 TO,
                 new MetricTotals(1, 25, 22, 18, 3, 9, 2, 4),
-                List.of(new MonthTotals("2026-03", 1, 25, 22, 18)),
-                List.of(new ClubTotals("club-a", 1, 25, 22, 18, 2)),
+                List.of(new ClubMonthTotals("club-a", "2026-03", 1, 25, 22, 18, 2)),
                 List.of(new EventTotals("event-1", "Robotics talk", "club-a", ENDS, 25, 22, 18, 2)),
                 new ExcludedEvents(1, 2, 0));
     }

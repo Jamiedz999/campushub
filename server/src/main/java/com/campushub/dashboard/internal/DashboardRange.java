@@ -17,9 +17,9 @@ record DashboardRange(Instant from, Instant to) {
      * reaching into the future would widen nothing and would only make the default start wrong. The
      * default start is the first instant of the month {@code DEFAULT_RANGE_MONTHS - 1} months back,
      * taken in the campus timezone — the month buckets are calendar months there, so the window that
-     * fills them has to begin where one does. A backwards range collapses to an empty one rather than
-     * being reordered: a caller who sent it meant something, and matching everything instead is the
-     * worse of the two guesses.
+     * fills them has to begin where one does. A backwards range collapses to the single instant at its
+     * end rather than being reordered: a caller who sent it meant something, and matching everything
+     * instead is the worse of the two guesses.
      */
     static DashboardRange resolve(Instant from, Instant to, Instant now, ZoneId zone) {
         Instant end = to == null || to.isAfter(now) ? now : to;

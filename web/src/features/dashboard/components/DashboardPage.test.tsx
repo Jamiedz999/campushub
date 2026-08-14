@@ -25,19 +25,26 @@ const OFFICER_VIEW: Dashboard = {
     unmetDemand: 14,
     manualAttendance: 15,
   },
-  months: [
-    { month: "2026-03", eventsRun: 1, capacity: 100, enrolled: 80, attended: 60 },
-    { month: "2026-04", eventsRun: 2, capacity: 80, enrolled: 62, attended: 49 },
-  ],
-  clubs: [
+  clubMonths: [
     {
       clubId: "club-a",
       clubName: "Robotics Society",
-      eventsRun: 3,
-      capacity: 180,
-      enrolled: 142,
-      attended: 109,
-      unmetDemand: 14,
+      month: "2026-03",
+      eventsRun: 1,
+      capacity: 100,
+      enrolled: 80,
+      attended: 60,
+      unmetDemand: 5,
+    },
+    {
+      clubId: "club-a",
+      clubName: "Robotics Society",
+      month: "2026-04",
+      eventsRun: 2,
+      capacity: 80,
+      enrolled: 62,
+      attended: 49,
+      unmetDemand: 9,
     },
   ],
   events: [
@@ -59,11 +66,12 @@ const OFFICER_VIEW: Dashboard = {
 const ADMIN_VIEW: Dashboard = {
   ...OFFICER_VIEW,
   scope: "ALL_CLUBS",
-  clubs: [
-    ...OFFICER_VIEW.clubs,
+  clubMonths: [
+    ...OFFICER_VIEW.clubMonths,
     {
       clubId: "club-b",
       clubName: "Choir",
+      month: "2026-04",
       eventsRun: 1,
       capacity: 30,
       enrolled: 12,
@@ -165,14 +173,15 @@ describe("DashboardPage", () => {
     expect(windows[0]).not.toEqual(windows[1]);
   });
 
-  it("asks for no window at all when the whole history is chosen", async () => {
-    const getSpy = mockRead(OFFICER_VIEW);
+  it("gives each Event its own metrics, not just the headline ones", async () => {
+    mockRead(OFFICER_VIEW);
 
     renderPage();
-    await screen.findByRole("region", { name: "Headline metrics" });
-    await userEvent.selectOptions(screen.getByLabelText(/Time range/), "all");
 
-    expect(getSpy.mock.lastCall?.[1]?.params).toEqual({ from: undefined });
+    const table = await screen.findByRole("region", { name: "Every Event" });
+    // Hack night: 40 of 50 enrolled attended, 50 of 50 Seats claimed.
+    expect(within(table).getByRole("row", { name: /Hack night/ })).toHaveTextContent("80%");
+    expect(within(table).getByRole("row", { name: /Hack night/ })).toHaveTextContent("100%");
   });
 
   it("tells an account with no Clubs that the dashboard is scoped to Clubs it officers", async () => {

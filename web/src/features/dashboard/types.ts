@@ -18,7 +18,24 @@ export interface MetricTotals {
   manualAttendance: number;
 }
 
-/** One calendar month, `YYYY-MM` in the campus timezone, bucketed by when the Event ended. */
+/**
+ * One Club's activity in one calendar month — `YYYY-MM` in the campus timezone, bucketed by when the
+ * Event ended. This is the grain the API sends club activity at, because it is the grain the ADR
+ * defines it at; the trend line and the cross-club comparison are both rollups of it, computed by the
+ * pure functions in series.ts.
+ */
+export interface ClubMonthTotals {
+  clubId: string;
+  clubName: string;
+  month: string;
+  eventsRun: number;
+  capacity: number;
+  enrolled: number;
+  attended: number;
+  unmetDemand: number;
+}
+
+/** Club activity summed across Clubs: one row per month, for the trend line. Derived, never sent. */
 export interface MonthTotals {
   month: string;
   eventsRun: number;
@@ -27,6 +44,7 @@ export interface MonthTotals {
   attended: number;
 }
 
+/** Club activity summed across months: one row per Club, for the comparison. Derived, never sent. */
 export interface ClubTotals {
   clubId: string;
   clubName: string;
@@ -64,8 +82,7 @@ export interface Dashboard {
   from: string;
   to: string;
   totals: MetricTotals;
-  months: MonthTotals[];
-  clubs: ClubTotals[];
+  clubMonths: ClubMonthTotals[];
   events: EventTotals[];
   excluded: ExcludedEvents;
 }

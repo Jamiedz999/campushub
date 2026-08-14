@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ClubComparisonChart } from "./ClubComparisonChart";
 import { EnrolledAgainstAttendedChart } from "./EnrolledAgainstAttendedChart";
+import { EventMetricsTable } from "./EventMetricsTable";
 import { RatesOverTimeChart } from "./RatesOverTimeChart";
 import { UnmetDemandTable } from "./UnmetDemandTable";
 import { WaitlistConversionFigure } from "./WaitlistConversionFigure";
@@ -136,6 +137,35 @@ describe("WaitlistConversionFigure", () => {
     render(<WaitlistConversionFigure totals={{ ...TOTALS, everQueued: 21, unmetDemand: 11 }} />);
 
     expect(screen.queryByText(/left the Waitlist/)).not.toBeInTheDocument();
+  });
+});
+
+describe("EventMetricsTable", () => {
+  it("gives each Event its own rates against the same denominators the headline uses", () => {
+    render(
+      <MemoryRouter>
+        <EventMetricsTable
+          events={[event({ eventId: "e1", title: "Choir", capacity: 30, enrolled: 12, attended: 9 })]}
+        />
+      </MemoryRouter>,
+    );
+
+    const row = screen.getByRole("row", { name: /Choir/ });
+    expect(row).toHaveTextContent("12 / 30");
+    expect(row).toHaveTextContent("40%"); // fill: 12 of 30 Seats
+    expect(row).toHaveTextContent("75%"); // attendance: 9 of 12 enrolled, not of 30 Seats
+    expect(row).toHaveTextContent("25%"); // no-show
+    expect(screen.getByRole("link", { name: "Choir" })).toHaveAttribute("href", "/events/e1");
+  });
+
+  it("says so plainly when no Event finished in the range", () => {
+    render(
+      <MemoryRouter>
+        <EventMetricsTable events={[]} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("No Event finished in this range.")).toBeVisible();
   });
 });
 

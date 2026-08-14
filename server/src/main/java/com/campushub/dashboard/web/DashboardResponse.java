@@ -1,11 +1,10 @@
 package com.campushub.dashboard.web;
 
-import com.campushub.dashboard.DashboardModule.ClubTotals;
+import com.campushub.dashboard.DashboardModule.ClubMonthTotals;
 import com.campushub.dashboard.DashboardModule.DashboardView;
 import com.campushub.dashboard.DashboardModule.EventTotals;
 import com.campushub.dashboard.DashboardModule.ExcludedEvents;
 import com.campushub.dashboard.DashboardModule.MetricTotals;
-import com.campushub.dashboard.DashboardModule.MonthTotals;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +21,7 @@ record DashboardResponse(
         Instant from,
         Instant to,
         Totals totals,
-        List<Month> months,
-        List<Club> clubs,
+        List<ClubMonth> clubMonths,
         List<Event> events,
         Excluded excluded) {
 
@@ -43,11 +41,14 @@ record DashboardResponse(
             long unmetDemand,
             long manualAttendance) {}
 
-    record Month(String month, long eventsRun, long capacity, long enrolled, long attended) {}
-
-    record Club(
+    /**
+     * One Club's activity in one calendar month. The trend line sums these across Clubs and the
+     * cross-club comparison sums them across months; both rollups are pure functions on the client.
+     */
+    record ClubMonth(
             String clubId,
             String clubName,
+            String month,
             long eventsRun,
             long capacity,
             long enrolled,
@@ -87,9 +88,8 @@ record DashboardResponse(
                         totals.everQueued(),
                         totals.unmetDemand(),
                         totals.manualAttendance()),
-                view.months().stream().map(DashboardResponse::month).toList(),
-                view.clubs().stream()
-                        .map(club -> club(club, clubNames.getOrDefault(club.clubId(), club.clubId())))
+                view.clubMonths().stream()
+                        .map(row -> clubMonth(row, clubNames.getOrDefault(row.clubId(), row.clubId())))
                         .toList(),
                 view.events().stream()
                         .map(event -> event(event, clubNames.getOrDefault(event.clubId(), event.clubId())))
@@ -97,20 +97,16 @@ record DashboardResponse(
                 new Excluded(excluded.draft(), excluded.cancelled(), excluded.inProgress()));
     }
 
-    private static Month month(MonthTotals month) {
-        return new Month(
-                month.month(), month.eventsRun(), month.capacity(), month.enrolled(), month.attended());
-    }
-
-    private static Club club(ClubTotals club, String clubName) {
-        return new Club(
-                club.clubId(),
+    private static ClubMonth clubMonth(ClubMonthTotals row, String clubName) {
+        return new ClubMonth(
+                row.clubId(),
                 clubName,
-                club.eventsRun(),
-                club.capacity(),
-                club.enrolled(),
-                club.attended(),
-                club.unmetDemand());
+                row.month(),
+                row.eventsRun(),
+                row.capacity(),
+                row.enrolled(),
+                row.attended(),
+                row.unmetDemand());
     }
 
     private static Event event(EventTotals event, String clubName) {

@@ -10,9 +10,10 @@ import {
   noShowRate,
 } from "../metrics";
 import { RANGE_OPTIONS, rangeStart, type RangeChoice } from "../range";
-import { excludedNotices } from "../series";
+import { clubTotals, excludedNotices, monthTotals } from "../series";
 import { ClubComparisonChart } from "./ClubComparisonChart";
 import { EnrolledAgainstAttendedChart } from "./EnrolledAgainstAttendedChart";
+import { EventMetricsTable } from "./EventMetricsTable";
 import { RatesOverTimeChart } from "./RatesOverTimeChart";
 import { UnmetDemandTable } from "./UnmetDemandTable";
 import { WaitlistConversionFigure } from "./WaitlistConversionFigure";
@@ -43,8 +44,13 @@ export function DashboardPage() {
     );
   }
 
-  const { scope, totals, months, clubs, events, excluded } = dashboard.data;
+  const { scope, totals, clubMonths, events, excluded } = dashboard.data;
   const notices = excludedNotices(excluded);
+  // Club activity arrives per Club per month, which is the grain the ADR defines it at. The trend line
+  // wants it summed one way and the comparison the other; both sums are pure functions, so neither
+  // chart can quietly disagree with the other about what a month or a Club contained.
+  const months = monthTotals(clubMonths);
+  const clubs = clubTotals(clubMonths);
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
@@ -112,6 +118,11 @@ export function DashboardPage() {
 
       <section aria-label="Enrolled against attended" className="rounded border p-4">
         <EnrolledAgainstAttendedChart events={events} />
+      </section>
+
+      <section aria-label="Every Event" className="rounded border p-4">
+        <h3 className="mb-2 text-sm font-medium text-slate-600">Every Event in this range</h3>
+        <EventMetricsTable events={events} />
       </section>
 
       {scope === "ALL_CLUBS" && (
