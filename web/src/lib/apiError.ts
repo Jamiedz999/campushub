@@ -8,7 +8,10 @@ interface ApiErrorShape {
   title: string;
   detail: string;
   fieldErrors?: Record<string, string>;
+  extensions?: Record<string, unknown>;
 }
+
+const PROBLEM_MEMBERS = new Set(["type", "title", "status", "detail", "instance", "code", "fieldErrors"]);
 
 /**
  * The typed error every httpClient call rejects with. `code` is the contract —
@@ -21,6 +24,12 @@ export class ApiError extends Error implements ApiErrorShape {
   readonly title: string;
   readonly detail: string;
   readonly fieldErrors: Record<string, string>;
+  /**
+   * Any other member the problem document carried — a refusal that has a fact
+   * the client needs, such as when an already-checked-in Student first checked
+   * in. `code` stays the contract; these are read only after switching on it.
+   */
+  readonly extensions: Record<string, unknown>;
 
   constructor(shape: ApiErrorShape) {
     super(shape.detail);
@@ -30,6 +39,13 @@ export class ApiError extends Error implements ApiErrorShape {
     this.title = shape.title;
     this.detail = shape.detail;
     this.fieldErrors = shape.fieldErrors ?? {};
+    this.extensions = shape.extensions ?? {};
+  }
+
+  /** One extension member, when it is a string. Nothing else is trusted from the wire. */
+  stringExtension(name: string): string | null {
+    const value = this.extensions[name];
+    return typeof value === "string" ? value : null;
   }
 }
 
@@ -54,6 +70,16 @@ function stringMap(value: unknown): Record<string, string> {
   return result;
 }
 
+function extraMembers(data: ProblemDetailBody): Record<string, unknown> {
+  const extensions: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!PROBLEM_MEMBERS.has(key)) {
+      extensions[key] = value;
+    }
+  }
+  return extensions;
+}
+
 function isProblemDetailBody(data: unknown): data is ProblemDetailBody {
   if (typeof data !== "object" || data === null) {
     return false;
@@ -75,6 +101,7 @@ export function normalizeApiError(error: unknown): ApiError {
         title: typeof data.title === "string" ? data.title : "Request Failed",
         detail: typeof data.detail === "string" ? data.detail : error.message,
         fieldErrors: stringMap(data.fieldErrors),
+        extensions: extraMembers(data),
       });
     }
   }

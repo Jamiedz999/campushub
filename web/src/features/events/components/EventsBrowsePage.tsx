@@ -146,6 +146,12 @@ export function EventsBrowsePage() {
                       >
                         View registration answers
                       </Link>
+                      <Link
+                        to={`/officer/events/${item.id}/door`}
+                        className="text-sm font-medium text-slate-700 hover:underline"
+                      >
+                        Run the door
+                      </Link>
                     </div>
                   )}
                 </li>

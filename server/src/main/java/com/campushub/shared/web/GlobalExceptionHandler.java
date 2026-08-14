@@ -61,6 +61,7 @@ class GlobalExceptionHandler {
         problem.setTitle("Conflict");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("code", exception.code());
+        exception.extensions().forEach(problem::setProperty);
         return problem;
     }
 

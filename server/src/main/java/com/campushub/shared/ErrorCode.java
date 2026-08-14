@@ -31,5 +31,14 @@ public enum ErrorCode {
     SLOT_TAKEN,
     SLOT_CROSSES_MIDNIGHT,
     SLOT_IN_DST_TRANSITION,
-    SLOT_ALREADY_STARTED
+    SLOT_ALREADY_STARTED,
+    // Check-in was refused — see docs/adr/07-define-qr-checkin-and-anti-fraud.md and the Check-in row of
+    // ADR 15's code table. Five of the door's six states are failures, and the door is the highest-stress
+    // surface in the product, so each one is a distinct code the frontend can word for its own case:
+    // TOKEN_EXPIRED reads as a normal retry, ALREADY_CHECKED_IN as reassurance, NOT_ON_ROSTER kindly.
+    TOKEN_INVALID,
+    TOKEN_EXPIRED,
+    NOT_ON_ROSTER,
+    ALREADY_CHECKED_IN,
+    CHECK_IN_WINDOW_CLOSED
 }

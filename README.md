@@ -75,6 +75,18 @@ that proves it rather than just asserting it.
   `VenueModuleImplIntegrationTest.parallelOverlappingSlotRequestsHaveExactlyOneWinner`
   (`server/src/test/java/com/campushub/venue/internal/VenueModuleImplIntegrationTest.java:53`).
 
+- **The door proves presence and identity separately, and neither half alone admits anyone.** The
+  screen at the door shows a code that is an HMAC over the Event and a 60-second window, so it is
+  worthless a minute later and possessing it means having seen a screen that is in the room; who
+  scanned it comes from their signed-in session. Nothing about the code is stored — it is verified by
+  recomputation — and the attendance write itself is one guarded append with the Roster check and an
+  idempotency guard in its filter. See
+  [the check-in ADR](docs/adr/07-define-qr-checkin-and-anti-fraud.md), which is equally clear about
+  what this does *not* defeat, and the test that fires parallel scans by one Student and asserts
+  exactly one record exists:
+  `EventRepositoryAttendanceIntegrationTest.nParallelScansByOneStudentProduceExactlyOneAttendanceRecord`
+  (`server/src/test/java/com/campushub/event/persistence/EventRepositoryAttendanceIntegrationTest.java:201`).
+
 - **Phase is derived, so it can never contradict its own timestamps.** Only Status (Draft, Published,
   Cancelled) is stored; every other reading — Scheduled, Registration Open, Full, Registration
   Closed, In Progress, Completed — is computed on read from Status, four timestamps and the Seat

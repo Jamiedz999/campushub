@@ -42,6 +42,8 @@ public class Event {
 
     private List<String> waitlist;
 
+    private List<AttendanceEntry> attendance;
+
     private int promotedCount;
 
     private int everQueuedCount;
@@ -77,6 +79,7 @@ public class Event {
         this.capacity = capacity;
         this.enrolled = new ArrayList<>();
         this.waitlist = new ArrayList<>();
+        this.attendance = new ArrayList<>();
         this.promotedCount = 0;
         this.everQueuedCount = 0;
         this.lastEnrollmentVersion = 0;
@@ -112,6 +115,7 @@ public class Event {
         this.capacity = capacity;
         this.enrolled = new ArrayList<>(enrolled);
         this.waitlist = new ArrayList<>(waitlist);
+        this.attendance = new ArrayList<>();
         this.registrationForm = RegistrationForm.empty();
     }
 
@@ -165,6 +169,12 @@ public class Event {
 
     public List<String> getWaitlist() {
         return List.copyOf(waitlist);
+    }
+
+    // Null on Event documents written before check-in existed; the Mongock change unit backfills them,
+    // and this keeps a reader safe in the window before it has run.
+    public List<AttendanceEntry> getAttendance() {
+        return attendance == null ? List.of() : List.copyOf(attendance);
     }
 
     public int getEverQueuedCount() {

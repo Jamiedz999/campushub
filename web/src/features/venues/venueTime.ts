@@ -16,12 +16,3 @@ export function formatMinute(minute: number): string {
   const minutes = minute % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
-
-export function formatCampusTime(instant: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: CAMPUS_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(instant));
-}
