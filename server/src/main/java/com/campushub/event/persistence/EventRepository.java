@@ -9,6 +9,7 @@ import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.EventSort;
 import com.campushub.event.domain.EventStatus;
+import com.campushub.venue.VenueModule.Slot;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -150,6 +151,22 @@ public class EventRepository {
         return Optional.ofNullable(mongoTemplate.findById(eventId, Event.class));
     }
 
+    /** Cancelled Events that have not started, used to repair only genuinely releasable orphans. */
+    public Set<String> cancelledUpcomingEventIds(List<String> eventIds, Instant now) {
+        if (eventIds.isEmpty()) {
+            return Set.of();
+        }
+        Query query = new Query(Criteria.where("id")
+                .in(eventIds)
+                .and("status")
+                .is(EventStatus.CANCELLED)
+                .and("startsAt")
+                .gt(now));
+        return mongoTemplate.find(query, Event.class).stream()
+                .map(Event::getId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     /**
      * One atomic update. Draft: every field is editable. Published, before startsAt: title,
      * description, the four timestamps and capacity, and capacity may only be raised — both guards live
@@ -167,6 +184,11 @@ public class EventRepository {
 
         List<Criteria> guards = new ArrayList<>();
         guards.add(editableWindow);
+        if (edit.startsAt() != null || edit.endsAt() != null) {
+            // Once a Venue is held, timestamps move only through the Slot command, which acquires the
+            // new Slot first. A generic PATCH must not create an Event that moved without a room.
+            guards.add(Criteria.where("venueId").is(null));
+        }
         if (edit.capacity() != null) {
             guards.add(new Criteria()
                     .orOperator(
@@ -214,6 +236,49 @@ public class EventRepository {
                         .updateFirst(new Query(filter), update, Event.class)
                         .getModifiedCount()
                 > 0;
+    }
+
+    /**
+     * Atomically moves the current Event and returns the Slot-bearing snapshot that was replaced. The
+     * lifecycle and ownership guards are part of this one database write; there is no application CAS.
+     */
+    public Optional<Event> moveToSlot(String eventId, Set<String> clubIds, Slot newSlot, Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("clubId")
+                .in(clubIds)
+                .and("status")
+                .ne(EventStatus.CANCELLED)
+                .and("startsAt")
+                .gt(now);
+        Update update = new Update()
+                .set("venueId", newSlot.venueId())
+                .set("startsAt", newSlot.startsAt())
+                .set("endsAt", newSlot.endsAt());
+        Event previous = mongoTemplate.findAndModify(
+                new Query(filter),
+                update,
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
+    }
+
+    /** Atomically clears the current Venue and returns the Event snapshot that held it. */
+    public Optional<Event> clearVenue(String eventId, Set<String> clubIds, Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("clubId")
+                .in(clubIds)
+                .and("venueId")
+                .ne(null)
+                .and("startsAt")
+                .gt(now);
+        Event previous = mongoTemplate.findAndModify(
+                new Query(filter),
+                new Update().unset("venueId"),
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
     }
 
     private static AggregationUpdate capacityRaiseUpdate(EventEdit edit, Instant now) {
@@ -282,7 +347,7 @@ public class EventRepository {
     }
 
     /** The owning Club's Officer. Published only, and only before endsAt. */
-    public boolean cancelAsOfficer(String eventId, Set<String> clubIds, Instant now) {
+    public Optional<Event> cancelAsOfficer(String eventId, Set<String> clubIds, Instant now) {
         Query query = new Query(Criteria.where("id")
                 .is(eventId)
                 .and("clubId")
@@ -298,7 +363,7 @@ public class EventRepository {
      * A University Admin, unscoped by Club — the one cross-Club write in the system. See
      * docs/adr/08-define-roles-and-resource-authorization.md.
      */
-    public boolean cancelAsAdmin(String eventId, Instant now) {
+    public Optional<Event> cancelAsAdmin(String eventId, Instant now) {
         Query query = new Query(Criteria.where("id")
                 .is(eventId)
                 .and("status")
@@ -308,11 +373,16 @@ public class EventRepository {
         return cancel(query);
     }
 
-    private boolean cancel(Query query) {
+    private Optional<Event> cancel(Query query) {
         // Only `status` is set: the Seat Ledger (enrolled, waitlist) is untouched and freezes exactly as
         // it was, per docs/adr/03-define-event-lifecycle.md.
         Update update = new Update().set("status", EventStatus.CANCELLED);
-        return mongoTemplate.updateFirst(query, update, Event.class).getModifiedCount() > 0;
+        Event previous = mongoTemplate.findAndModify(
+                query,
+                update,
+                FindAndModifyOptions.options().returnNew(false),
+                Event.class);
+        return Optional.ofNullable(previous);
     }
 
     /**

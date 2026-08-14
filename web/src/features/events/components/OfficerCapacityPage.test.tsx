@@ -26,6 +26,7 @@ function view(overrides: Partial<EventOfficerView>): EventOfficerView {
     title: "Robotics Night",
     description: "Build a small robot",
     status: "PUBLISHED",
+    venueId: null,
     phase: "FULL",
     registrationOpensAt: "2026-03-01T00:00:00Z",
     registrationClosesAt: "2026-03-10T00:00:00Z",

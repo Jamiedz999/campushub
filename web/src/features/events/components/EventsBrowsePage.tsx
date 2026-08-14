@@ -123,6 +123,12 @@ export function EventsBrowsePage() {
                   {currentActor.data?.officerClubIds.includes(item.clubId) && (
                     <div className="flex flex-wrap gap-3">
                       <Link
+                        to={`/officer/events/${item.id}/venue`}
+                        className="text-sm font-medium text-slate-700 hover:underline"
+                      >
+                        Book a venue
+                      </Link>
+                      <Link
                         to={`/officer/events/${item.id}/capacity`}
                         className="text-sm font-medium text-slate-700 hover:underline"
                       >

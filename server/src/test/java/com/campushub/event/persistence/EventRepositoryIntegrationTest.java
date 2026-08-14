@@ -9,6 +9,7 @@ import com.campushub.event.domain.EnrollmentVia;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventEdit;
 import com.campushub.event.domain.EventStatus;
+import com.campushub.venue.VenueModule.Slot;
 import com.mongodb.client.MongoClients;
 import java.time.Instant;
 import java.util.List;
@@ -250,6 +251,24 @@ class EventRepositoryIntegrationTest {
     }
 
     @Test
+    void slotWritesReturnTheSnapshotTheyAtomicallyReplace() {
+        String id = repository.insertDraft(draft("club-a"));
+        Instant now = OPENS.minusSeconds(60);
+        Slot firstSlot = new Slot("venue-a", STARTS, ENDS);
+        Slot secondSlot = new Slot("venue-b", STARTS.plusSeconds(3_600), ENDS.plusSeconds(3_600));
+
+        Event beforeFirstMove = repository.moveToSlot(id, Set.of("club-a"), firstSlot, now).orElseThrow();
+        Event beforeSecondMove = repository.moveToSlot(id, Set.of("club-a"), secondSlot, now).orElseThrow();
+        Event beforeClear = repository.clearVenue(id, Set.of("club-a"), now).orElseThrow();
+
+        assertThat(beforeFirstMove.getVenueId()).isNull();
+        assertThat(beforeSecondMove.getVenueId()).isEqualTo("venue-a");
+        assertThat(beforeSecondMove.getStartsAt()).isEqualTo(STARTS);
+        assertThat(beforeClear.getVenueId()).isEqualTo("venue-b");
+        assertThat(repository.findById(id).orElseThrow().getVenueId()).isNull();
+    }
+
+    @Test
     void publishingADraftMovesItToPublished() {
         String id = repository.insertDraft(draft("club-a"));
 
@@ -288,9 +307,9 @@ class EventRepositoryIntegrationTest {
                 new Update().set("enrolled", seededEnrolled).set("waitlist", List.of("student-2")),
                 Event.class);
 
-        boolean cancelled = repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60));
+        var cancelled = repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60));
 
-        assertThat(cancelled).isTrue();
+        assertThat(cancelled).isPresent();
         Event event = repository.findScopedById(id, Set.of("club-a")).orElseThrow();
         assertThat(event.getStatus()).isEqualTo(EventStatus.CANCELLED);
         assertThat(event.getEnrolled()).extracting(EnrolledEntry::studentId).containsExactly("student-1");
@@ -302,7 +321,7 @@ class EventRepositoryIntegrationTest {
         String id = publishedEvent("club-b", 5);
 
         assertThat(repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60)))
-                .isFalse();
+                .isEmpty();
     }
 
     @Test
@@ -310,16 +329,39 @@ class EventRepositoryIntegrationTest {
         String id = publishedEvent("club-a", 5);
 
         assertThat(repository.cancelAsOfficer(id, Set.of("club-a"), ENDS.plusSeconds(60)))
-                .isFalse();
+                .isEmpty();
+    }
+
+    @Test
+    void anInProgressEventCanBeCancelledWithoutLosingItsPreviousStartTime() {
+        String id = publishedEvent("club-a", 5);
+
+        Event previous = repository
+                .cancelAsOfficer(id, Set.of("club-a"), STARTS.plusSeconds(60))
+                .orElseThrow();
+
+        assertThat(previous.getStartsAt()).isEqualTo(STARTS);
+        assertThat(repository.findById(id).orElseThrow().getStatus()).isEqualTo(EventStatus.CANCELLED);
+    }
+
+    @Test
+    void orphanRepairOnlyReturnsCancelledEventsThatHaveNotStarted() {
+        String id = publishedEvent("club-a", 5);
+        repository.cancelAsOfficer(id, Set.of("club-a"), STARTS.minusSeconds(60));
+
+        assertThat(repository.cancelledUpcomingEventIds(List.of(id), STARTS.minusSeconds(1)))
+                .containsExactly(id);
+        assertThat(repository.cancelledUpcomingEventIds(List.of(id), STARTS))
+                .isEmpty();
     }
 
     @Test
     void adminCancelReachesAnyClubsEvent() {
         String id = publishedEvent("club-a", 5);
 
-        boolean cancelled = repository.cancelAsAdmin(id, STARTS.minusSeconds(60));
+        var cancelled = repository.cancelAsAdmin(id, STARTS.minusSeconds(60));
 
-        assertThat(cancelled).isTrue();
+        assertThat(cancelled).isPresent();
         assertThat(repository.findScopedById(id, Set.of("club-a")).orElseThrow().getStatus())
                 .isEqualTo(EventStatus.CANCELLED);
     }
@@ -329,7 +371,7 @@ class EventRepositoryIntegrationTest {
         String id = publishedEvent("club-a", 5);
         repository.cancelAsAdmin(id, STARTS.minusSeconds(60));
 
-        assertThat(repository.cancelAsAdmin(id, STARTS.minusSeconds(60))).isFalse();
+        assertThat(repository.cancelAsAdmin(id, STARTS.minusSeconds(60))).isEmpty();
         assertThat(repository.exists(id)).isTrue();
     }
 

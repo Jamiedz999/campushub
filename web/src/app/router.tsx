@@ -5,6 +5,7 @@ import { OfficerRegistrationFormPage } from "../features/events/components/Offic
 import { EventRegistrationPage } from "../features/registration/components/EventRegistrationPage";
 import { MyEventsPage } from "../features/registration/components/MyEventsPage";
 import { OfficerRegistrationAnswersPage } from "../features/registration/components/OfficerRegistrationAnswersPage";
+import { OfficerVenuePage } from "../features/venues/components/OfficerVenuePage";
 import { RequireAuth } from "./RequireAuth";
 import { SignInPage } from "./SignInPage";
 import { SystemStatusPage } from "./SystemStatusPage";
@@ -32,6 +33,10 @@ export const router = createBrowserRouter([
       {
         path: "/events/:eventId",
         element: <EventRegistrationPage />,
+      },
+      {
+        path: "/officer/events/:eventId/venue",
+        element: <OfficerVenuePage />,
       },
       {
         path: "/officer/events/:eventId/capacity",

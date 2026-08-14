@@ -34,6 +34,8 @@ public class Event {
 
     private Instant endsAt;
 
+    private String venueId;
+
     private int capacity;
 
     private List<EnrolledEntry> enrolled;
@@ -71,6 +73,7 @@ public class Event {
         this.registrationClosesAt = registrationClosesAt;
         this.startsAt = startsAt;
         this.endsAt = endsAt;
+        this.venueId = null;
         this.capacity = capacity;
         this.enrolled = new ArrayList<>();
         this.waitlist = new ArrayList<>();
@@ -146,6 +149,10 @@ public class Event {
 
     public Instant getEndsAt() {
         return endsAt;
+    }
+
+    public String getVenueId() {
+        return venueId;
     }
 
     public int getCapacity() {

@@ -7,7 +7,7 @@ import importX from "eslint-plugin-import-x";
 
 // A feature may not import from another feature — ADR 17. Shared code moves
 // into lib/ or components/, or the two are composed at the route level.
-const FEATURES = ["events", "registration", "checkin", "dashboard"];
+const FEATURES = ["events", "registration", "checkin", "dashboard", "venues"];
 
 function featureBoundaryZones() {
   return FEATURES.map((feature) => ({
