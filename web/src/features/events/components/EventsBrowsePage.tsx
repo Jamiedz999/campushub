@@ -52,14 +52,28 @@ export function EventsBrowsePage() {
 
   const total = query.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const actor = currentActor.data;
+  const hasDashboard =
+    actor !== undefined && (actor.systemRole === "UNIVERSITY_ADMIN" || actor.officerClubIds.length > 0);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Events</h1>
-        <Link to="/events/mine" className="text-sm text-slate-600 hover:underline">
-          My events
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link to="/events/mine" className="text-sm text-slate-600 hover:underline">
+            My events
+          </Link>
+          {/* Only where there is one to open. A dashboard is scoped to the Clubs an account officers,
+              so for a Student the endpoint 404s — and a link that always leads to "there is nothing
+              here for you" is worse than no link. The page keeps its own message for the case where a
+              grant is revoked between the two reads. */}
+          {hasDashboard && (
+            <Link to="/dashboard" className="text-sm text-slate-600 hover:underline">
+              Dashboard
+            </Link>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">

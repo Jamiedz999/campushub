@@ -1,6 +1,7 @@
 package com.campushub.club;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 // Grants and clubs never cross the module boundary as documents — only their identifiers do, so no
@@ -24,6 +25,13 @@ public interface ClubModule {
 
     /** Revokes Club Officer rights in {@code clubId} from {@code accountId}, if held. */
     void revokeOfficer(String clubId, String accountId);
+
+    /**
+     * Display names for the named Clubs, keyed by id; ids that match nothing remain absent. The same
+     * shape as IdentityAccessModule.displayNames, and for the same reason: a caller that has already
+     * been scoped to a set of ids needs their labels, not their documents.
+     */
+    Map<String, String> clubNames(Set<String> clubIds);
 
     /** The account ids currently holding Club Officer rights in {@code clubId}. Not caller-scoped. */
     List<String> officersOf(String clubId);

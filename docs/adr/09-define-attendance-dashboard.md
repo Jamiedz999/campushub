@@ -38,6 +38,10 @@ Attendance rate is deliberately measured against **enrolled**, because it answer
 
 The exclusions are shown in the UI as a count — "3 Cancelled Events not shown" — rather than left to be inferred from a total that does not add up. A number that quietly omits rows is a number nobody can check.
 
+**Which excluded Events fall inside a time range, settled during implementation (Issue #10).** The population is bounded by `endsAt`, and a running Event has not reached its own yet, so the same clause would count none of them. The exclusion count therefore reads: Draft and Cancelled Events **whose `endsAt` falls in the range**, and Published Events that **had started by the range's end and had not finished by it**.
+
+There is deliberately **no lower bound on `startsAt`** for that second clause. An Event that began before the window and is still running would otherwise be absent from every metric *because* it has not finished and absent from the count of what is missing *because* it did not start here — a row omitted twice over, which is precisely the failure this section exists to prevent. Both clauses are scoped by Club exactly as the metrics are: another Club's running Event is not an Officer's missing row.
+
 **Manual override share** exists because the check-in decision made scanned and manual records distinguishable. A club whose attendance is 80% manual has not demonstrated attendance, and the dashboard should say so.
 
 ### Two fields this decision adds to the Seat Ledger
@@ -50,6 +54,8 @@ Waitlist conversion cannot be computed from the Seat Ledger as the registration 
 
 **The Event carries an `everQueuedCount`, incremented in the guarded write that appends to `waitlist`**, and conversion is `promotedCount / everQueuedCount`. Unmet demand is unaffected: it is the queue's length at the end, and someone who left is not unmet demand, they are a lost registrant. The two numbers now measure different things on purpose.
 
+**The grain club activity is sent at, settled during implementation (Issue #10).** "Per Club, per month" is two dimensions, and an API that collapsed either one would satisfy the words and not the definition — a per-month series across all Clubs cannot be split back apart, and a per-Club total across all months cannot be put back in time. The aggregation therefore groups by `(clubId, month)` once, and the trend line and the cross-club comparison are each a sum over one of those dimensions, computed by the same pure frontend functions everything else here is. One query, both questions, and no chance of the two disagreeing about what a month contained.
+
 ### Computed live, and the conditions that would change that
 
 Every number is computed on read by a **MongoDB aggregation pipeline**. There is no pre-aggregated collection and no scheduled ETL in Core.
@@ -57,6 +63,12 @@ Every number is computed on read by a **MongoDB aggregation pipeline**. There is
 This is correct at this scale — hundreds of Events, tens of thousands of attendance entries — where an indexed aggregation answers in milliseconds. Pre-aggregating now would be building a cache for a problem that does not exist, and the map's guardrails forbid exactly that.
 
 **What would force the change**, recorded so the position is falsifiable rather than merely asserted: a dashboard query exceeding roughly one second, or Event counts in the tens of thousands. That threshold is also the honest opening for a future measured performance experiment — profile first, then decide between indexes, pre-aggregation and caching. That experiment is Future Work and is explicitly not a reason to add Redis to Core.
+
+**Measured, so the threshold has a number under it (implementation Issue #10, 2026-08-14).** One dashboard read is four aggregation pipelines — the headline totals, club activity by `(clubId, month)`, the per-Event rows, and the excluded count — and one page load pays for all four. Against 500 Events carrying 30,000 attendance entries, on a `mongo:8` Testcontainer with the compound `(status, endsAt, clubId)` index the population match uses, **the whole read has a median of 51 ms**, five runs after a warm-up. That is roughly twenty times inside the one-second threshold, which is why "computed on read" is the position and not an aspiration.
+
+`DashboardPerformanceIntegrationTest` in `server/` is that measurement, and it asserts the threshold rather than the figure. Fifty-one milliseconds is a property of one laptop and would be a flaky assertion; one second is the number this decision actually rests on, and only a change of an order of magnitude in the data or the query can break it — which is exactly the event this paragraph wants to hear about.
+
+**Why the per-Event list is not paged, settled during implementation (Issue #10).** [The API contract](15-define-http-api-and-time-contract.md) caps every collection response at 100 "so that no caller can turn a paged endpoint into a full export". The dashboard's per-Event rows are not that kind of collection: they are one field of a composite resource, every metric beside them is already computed over exactly the same set, and a page of them would make the table disagree with the totals above it. **The time range is what bounds the list**, and the range is bounded by the population — hundreds of Events at this scale. Trimming for readability happens on the client, in a pure function that reports how many rows it left off the chart, and the full list stays in the table beneath.
 
 ### The two views
 
