@@ -8,7 +8,13 @@ import {
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
-import ReactEChartsCore from "echarts-for-react/lib/core";
+// The ESM build, deliberately, not the `lib/` one beside it. `echarts-for-react/lib/core` is
+// CommonJS, and the production bundler's Node-style interop hands back the whole module object where
+// its default export was asked for — so the dashboard rendered an object as a component and every
+// build of it since Issue #10 crashed with React error #130. Only the built app was affected, which
+// is why nothing but a journey against the composed stack found it. See
+// web/cypress/e2e/door-code-checkin-dashboard.cy.ts, which is what did.
+import ReactEChartsCore from "echarts-for-react/esm/core";
 
 // ECharts' default entry point registers every chart type it has, which is most of a megabyte for the
 // four this dashboard draws. Registering only what is used keeps the lazily-loaded dashboard chunk to

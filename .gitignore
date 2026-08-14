@@ -13,6 +13,7 @@ web/dist-ssr/
 web/coverage/
 web/cypress/videos/
 web/cypress/screenshots/
+web/cypress/downloads/
 web/*.tsbuildinfo
 
 # Logs

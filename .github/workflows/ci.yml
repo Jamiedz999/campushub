@@ -53,6 +53,59 @@ jobs:
         if: always()
         run: docker compose down
 
+  cypress-journeys:
+    # Its own job, not a step of the build: these drive a running stack rather than a source tree, and
+    # they fail the build like everything else here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web install
+        run: npm --prefix web ci
+
+      # Explicit, because the Dockerfile sets CYPRESS_INSTALL_BINARY=0 for the image build and because
+      # npm does not always run install scripts. Idempotent when the binary is already cached.
+      - name: Cypress install
+        run: npm --prefix web exec cypress install
+
+      - name: Prepare environment for compose
+        run: cp .env.example .env
+
+      - name: Compose the stack
+        run: docker compose up --build --wait
+
+      - name: Cypress journeys
+        run: npm --prefix web run e2e
+
+      # The acceptance criterion, run rather than asserted: the same three journeys again, against the
+      # same stack they just wrote data into. A journey that only passes on a clean database, or that
+      # collides with what its own first run left behind, fails here — which is what a retry count
+      # would have hidden instead of fixed.
+      - name: Cypress journeys, a second time against the same stack
+        run: npm --prefix web run e2e
+
+      - name: Keep the screenshots of whatever failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: web/cypress/screenshots
+          if-no-files-found: ignore
+
+      - name: Dump container logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down
+
   docs-link-check:
     runs-on: ubuntu-latest
     steps:
