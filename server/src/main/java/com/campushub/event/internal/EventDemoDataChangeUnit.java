@@ -1,8 +1,7 @@
 package com.campushub.event.internal;
 
 import com.campushub.club.ClubModule;
-import com.campushub.event.domain.Event;
-import com.campushub.event.persistence.EventRepository;
+import com.campushub.event.EventModule;
 import com.campushub.identityaccess.IdentityAccessModule;
 import io.mongock.api.annotations.ChangeUnit;
 import io.mongock.api.annotations.Execution;
@@ -24,17 +23,14 @@ public class EventDemoDataChangeUnit {
 
     @Execution
     public void execution(
-            EventRepository eventRepository,
-            ClubModule clubModule,
-            IdentityAccessModule identityAccessModule,
-            Clock clock) {
+            EventModule eventModule, ClubModule clubModule, IdentityAccessModule identityAccessModule, Clock clock) {
         String clubId = clubModule.createClub("Photography Club");
         identityAccessModule
                 .findAccountIdByEmail("officer@demo.campushub")
                 .ifPresent(officerId -> clubModule.grantOfficer(clubId, officerId));
 
         Instant now = Instant.now(clock);
-        Event event = new Event(
+        String eventId = eventModule.createDraft(
                 clubId,
                 "Beginner Darkroom Workshop",
                 "Hands-on introduction to developing black-and-white film — no experience needed, "
@@ -44,9 +40,7 @@ public class EventDemoDataChangeUnit {
                 now.plus(Duration.ofDays(7)),
                 now.plus(Duration.ofDays(7)).plus(Duration.ofHours(2)),
                 40);
-
-        String eventId = eventRepository.insertDraft(event);
-        eventRepository.publish(eventId, Set.of(clubId));
+        eventModule.publish(eventId, Set.of(clubId));
     }
 
     @RollbackExecution

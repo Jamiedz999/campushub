@@ -64,6 +64,7 @@ jobs:
           args: >-
             --include-fragments
             --exclude '<[a-zA-Z]+>'
+            --exclude '^https?://localhost'
             --accept 200..=299,403,429
             README.md CONTEXT.md docs
           fail: true

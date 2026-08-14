@@ -79,9 +79,10 @@ that proves it rather than just asserting it.
   Cancelled) is stored; every other reading — Scheduled, Registration Open, Full, Registration
   Closed, In Progress, Completed — is computed on read from Status, four timestamps and the Seat
   Ledger. Nothing writes it, so nothing can leave it stale. See
-  [the Event lifecycle ADR](docs/adr/03-define-event-lifecycle.md) and
-  `PhaseTest` (`server/src/test/java/com/campushub/event/domain/PhaseTest.java`), which checks every
-  row of the Phase table at the exact instant it takes over from the last one.
+  [the Event lifecycle ADR](docs/adr/03-define-event-lifecycle.md) and `PhaseTest`, which checks
+  every row of the Phase table at the exact instant it takes over from the last one, e.g.
+  `atTheExactInstantRegistrationOpensPhaseBecomesRegistrationOpen`
+  (`server/src/test/java/com/campushub/event/domain/PhaseTest.java:43`).
 
 ## What this deliberately doesn't do
 
