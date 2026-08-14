@@ -4,6 +4,4 @@
 **/coverage
 **/target
 **/*.tsbuildinfo
-# The Cypress journeys drive the running container from outside it — see .github/workflows/ci.yml.
-web/cypress
 .env

@@ -6,6 +6,7 @@ import {
   publishEvent,
   signIn,
   signInThroughTheUi,
+  uniqueRun,
 } from "../support/campus";
 
 /**
@@ -21,7 +22,7 @@ import {
  */
 describe("the door code, the check-in and the dashboard", () => {
   it("admits a Student at the door and counts them on the Officer's dashboard", () => {
-    const run = `journeyrun${Date.now()}`;
+    const run = uniqueRun();
     const title = `Door journey ${run}`;
 
     // Starting in ten minutes: check-in opens fifteen minutes before an Event starts, so the door is
@@ -89,7 +90,11 @@ describe("the door code, the check-in and the dashboard", () => {
       // One Seat, one person through the door and nobody missing — read off the Event's own row, in
       // the columns its header names: Event, Club, Enrolled, Attended, Fill, Attendance, No-show.
       cy.visit("/dashboard");
-      cy.contains("h1", "Attendance for your Clubs").should("be.visible");
+      // Longer than anything else here waits, and for a reason the app states: the dashboard route is
+      // loaded on demand because ECharts is by far the largest thing this app ships (see the comment
+      // on the route in web/src/app/router.tsx). Fetching and parsing that chunk is the one step in
+      // these journeys that is slow by design rather than by accident.
+      cy.contains("h1", "Attendance for your Clubs", { timeout: 30_000 }).should("be.visible");
       cy.get("section[aria-label='Every Event']")
         .contains("tr", title)
         .within(() => {

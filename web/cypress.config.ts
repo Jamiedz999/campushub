@@ -21,6 +21,14 @@ export default defineConfig({
     // acceptance is that they run twice in a row without flaking. If one of them needs a retry, the
     // journey is wrong, not the count.
     retries: 0,
+    // Cypress's own default is four seconds, which is a number for a laptop with nothing else running.
+    // A shared CI runner takes longer to sign in — three round trips and a re-render — and longer
+    // again to parse a code-split chunk, and both showed up as failures under deliberate load here.
+    //
+    // This is not the retry count under another name. A retry re-runs a journey that failed and calls
+    // the second answer the true one; this says how long a claim is given to become true *once*. A
+    // claim that is false still fails, and fails on the first attempt.
+    defaultCommandTimeout: 10_000,
     // Screenshots on failure are enough to see what the door screen or the browse list actually showed.
     // Video costs minutes per CI run to record a passing journey nobody watches.
     video: false,

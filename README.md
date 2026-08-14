@@ -109,7 +109,7 @@ that proves it rather than just asserting it.
 
 - **Three journeys drive the whole stack in CI, and the one thing they cannot do is named.** Cypress
   runs against `docker compose` — one origin, a real session cookie, real MongoDB, no stubbed API —
-  over registration to Waitlist to Promotion, an Officer publishing and booking a room and being
+  over registration to Waitlist to Promotion, an Officer publishing and booking a Venue and being
   refused the second claim on it, and a Student getting through the door and appearing on the
   dashboard. That third journey **posts a server-derived code to the check-in endpoint rather than
   scanning it**, because a headless browser cannot read a QR code: the camera is the one link in that

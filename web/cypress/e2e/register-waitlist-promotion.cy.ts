@@ -1,19 +1,27 @@
-import { ALEX, OFFICER, SAM, minutesFromNow, publishEvent, signInThroughTheUi } from "../support/campus";
+import {
+  ALEX,
+  OFFICER,
+  SAM,
+  minutesFromNow,
+  publishEvent,
+  signInThroughTheUi,
+  uniqueRun,
+} from "../support/campus";
 
 /**
  * Journey 1 — register → Waitlist → Promotion.
  *
  * The Seat Ledger's whole argument, driven by three people through the screens they would really use:
- * one Seat, two Students who want it, and the queue deciding who gets it when the first one leaves.
+ * one Seat, two Students who want it, and the Waitlist deciding who gets it when the first one leaves.
  * Nothing here reads the answer out of the API — every claim is what a person is shown.
  */
 describe("register, then the Waitlist, then Promotion", () => {
   it("hands the freed Seat to the Student who queued for it", () => {
-    // Unique per run, which is what lets this spec run twice in a row against one long-lived stack.
-    // It is also one $text term, so the search box below can find this Event and only this Event.
-    const run = `journeyrun${Date.now()}`;
+    const run = uniqueRun();
     const title = `Last Seat ${run}`;
     const question = "What are you hoping to learn?";
+
+    let eventId = "";
 
     signInThroughTheUi(OFFICER);
     publishEvent({
@@ -26,9 +34,13 @@ describe("register, then the Waitlist, then Promotion", () => {
         startsAt: minutesFromNow(180),
         endsAt: minutesFromNow(240),
       },
-    }).then((eventId) => {
-      // The Officer builds the custom form on the console, because "a Student fills a custom form"
-      // is only worth anything if a person put the question there.
+    }).then((id) => {
+      eventId = id;
+    });
+
+    cy.then(() => {
+      // The Officer builds the custom form on the console, because "a Student fills a custom form" is
+      // only worth anything if a person put the question there.
       cy.visit(`/officer/events/${eventId}/registration-form`);
       cy.contains("label", "Field type").find("select").select("Short text");
       cy.contains("button", "Add field").click();
@@ -50,7 +62,7 @@ describe("register, then the Waitlist, then Promotion", () => {
       cy.contains("button", "Register").click();
       cy.contains("registered for this Event").should("be.visible");
 
-      // Sam arrives to a full Event. The same form, a different button, and a place in the queue.
+      // Sam arrives to a full Event. The same form, a different button, and a place on the Waitlist.
       signInThroughTheUi(SAM);
       cy.visit(`/events/${eventId}`);
       cy.contains("This Event is full").should("be.visible");
@@ -59,7 +71,7 @@ describe("register, then the Waitlist, then Promotion", () => {
       cy.contains("number 1 on the Waitlist").should("be.visible");
 
       // Alex withdraws. The Seat does not come back to Alex — the Event is full again the instant the
-      // page re-reads it, because the queue was served before Alex's own screen finished refreshing.
+      // page re-reads it, because the Waitlist was served before Alex's own screen finished refreshing.
       signInThroughTheUi(ALEX);
       cy.visit(`/events/${eventId}`);
       cy.contains("button", "Withdraw from Event").click();
@@ -67,11 +79,15 @@ describe("register, then the Waitlist, then Promotion", () => {
       cy.contains("registered for this Event").should("not.exist");
 
       // Sam was promoted without being asked for anything, and is told which way they got in.
+      //
+      // Read on the Event's own page and not on "My events", though both carry the badge. That list
+      // is a page of twenty sorted by startsAt, and every run of this journey leaves Sam holding one
+      // more Seat — so on a stack kept alive for twenty-odd runs the newest Event sinks off the first
+      // page and the assertion fails for a reason that has nothing to do with Promotion. A journey
+      // that quietly depends on how many times it has run before is the thing this suite must not be.
       signInThroughTheUi(SAM);
       cy.visit(`/events/${eventId}`);
       cy.contains("You were on the Waitlist").should("be.visible");
-      cy.visit("/events/mine");
-      cy.contains("li", title).should("contain", "You were on the Waitlist");
     });
   });
 });

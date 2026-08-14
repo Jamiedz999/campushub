@@ -60,41 +60,42 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
  *
  * The unauthenticated GET first is what guarantees the cookie is there to read: Spring writes
  * XSRF-TOKEN on every response, and it regenerates the token on sign-in, so it is read fresh for each
- * call rather than captured once at the top of a spec.
+ * request rather than captured once at the top of a spec.
  */
+function withCsrf<T>(options: Partial<Cypress.RequestOptions>): Cypress.Chainable<Cypress.Response<T>> {
+  return cy
+    .request({ method: "GET", url: "/api/system" })
+    .then(() => cy.getCookie(CSRF_COOKIE))
+    .then((cookie) =>
+      cy.request<T>({ ...options, headers: { [CSRF_HEADER]: cookie?.value ?? "" } }),
+    );
+}
+
 export function api<T = unknown>(
   method: Method,
   url: string,
   body?: Cypress.RequestBody,
 ): Cypress.Chainable<Cypress.Response<T>> {
-  return cy
-    .request({ method: "GET", url: "/api/system" })
-    .then(() => cy.getCookie(CSRF_COOKIE))
-    .then((cookie) =>
-      cy.request<T>({ method, url, body, headers: { [CSRF_HEADER]: cookie?.value ?? "" } }),
-    );
+  return withCsrf<T>({ method, url, body });
 }
 
 /**
  * Becomes this account without going through the sign-in screen. Used where a journey needs a second
- * or third person on stage — an Officer setting the room up, an Admin creating a Venue — and the act
- * of signing in is not what the journey is showing.
+ * or third person on stage — an Officer setting up before the doors open, an Admin recording a Venue —
+ * and the act of signing in is not what the journey is showing.
  *
  * Clearing the cookies first is the switch: sessions here are cookie-backed, so the previous person is
  * still signed in until their cookie is gone.
  */
 export function signIn(account: Account): void {
   cy.clearAllCookies();
-  cy.request({ method: "GET", url: "/api/system" });
-  cy.getCookie(CSRF_COOKIE).then((cookie) =>
-    cy.request({
-      method: "POST",
-      url: "/api/auth/login",
-      form: true,
-      body: { email: account.email, password: account.password },
-      headers: { [CSRF_HEADER]: cookie?.value ?? "" },
-    }),
-  );
+  withCsrf({
+    method: "POST",
+    url: "/api/auth/login",
+    // Spring's form login reads the credentials as url-encoded parameters, not as JSON.
+    form: true,
+    body: { email: account.email, password: account.password },
+  });
 }
 
 /** The same, typed into the real form, for the person whose journey it is. */
@@ -129,6 +130,18 @@ export interface EventTimes {
   endsAt: string;
 }
 
+/**
+ * A token unique to this run, and one `$text` search term.
+ *
+ * Every journey puts it in the titles it creates. That is what lets the same journey run twice in a
+ * row against one long-lived stack without meeting what its own last run left behind, and what lets
+ * the browse screen's search box find one Event rather than a family of them. One word with no
+ * punctuation in it, because MongoDB's text index splits on everything else.
+ */
+export function uniqueRun(): string {
+  return `journeyrun${Date.now()}`;
+}
+
 /** An instant relative to now, as the API's ISO-8601 UTC. Negative goes backwards. */
 export function minutesFromNow(minutes: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -137,7 +150,7 @@ export function minutesFromNow(minutes: number): string {
 /**
  * One hour in the middle of a day some days from now.
  *
- * For the journey that books a room. A Slot may cross neither campus midnight nor the daylight-saving
+ * For the journey that books a Venue. A Slot may cross neither campus midnight nor the daylight-saving
  * transition hour (docs/adr/06-define-venue-slot-booking.md), and "two days and an hour from now"
  * walks into the first of those whenever CI happens to start late in the evening — a one-run-in-24
  * failure with the wrong reason attached. Noon UTC is 12:00 or 13:00 in Europe/Dublin, comfortably
@@ -155,7 +168,7 @@ export function middayHour(daysFromNow: number): { startsAt: string; endsAt: str
 
 export interface NewEvent {
   title: string;
-  description?: string;
+  description: string;
   capacity: number;
   times: EventTimes;
 }
@@ -172,7 +185,7 @@ export function publishEvent(event: NewEvent): Cypress.Chainable<string> {
     .then((clubId) =>
       api<{ id: string }>("POST", `/api/clubs/${clubId}/events`, {
         title: event.title,
-        description: event.description ?? "Created by a Cypress journey.",
+        description: event.description,
         capacity: event.capacity,
         ...event.times,
       }),
@@ -183,9 +196,18 @@ export function publishEvent(event: NewEvent): Cypress.Chainable<string> {
     });
 }
 
-/** A Venue record, which only a University Admin may create and which Core gives no screen for. */
-export function createVenue(name: string): Cypress.Chainable<string> {
-  return api<{ id: string }>("POST", "/api/venues", { name }).then((response) => response.body.id);
+/**
+ * A Venue record, which only a University Admin may create and which Core gives no screen for. The
+ * name is how the journey picks it out again — the Venue console names Venues, it does not identify
+ * them — so nothing here needs its id.
+ *
+ * A run-named Venue is left behind, because Core has no way to delete one. CI composes a fresh stack
+ * per run so nothing accumulates there; against a stack kept alive for a hundred-odd local runs the
+ * newest Venue falls off the console's first page of a hundred, sorted by name, and the journey fails
+ * loudly on the missing option rather than passing on the wrong Venue.
+ */
+export function createVenue(name: string): void {
+  api("POST", "/api/venues", { name });
 }
 
 /** A 24-character hexadecimal field id, which is what the server accepts — see the form builder's own. */
