@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DoorSocketDouble } from "../doorSocketDouble";
+import { DoorSocketDouble } from "../__doorSocketDouble";
 import { useDoorScopeSocket } from "./useDoorScopeSocket";
 
 function watchDoor(eventId = "event-1") {

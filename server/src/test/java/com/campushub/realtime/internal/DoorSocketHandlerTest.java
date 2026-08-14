@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 class DoorSocketHandlerTest {
 
@@ -23,7 +24,11 @@ class DoorSocketHandlerTest {
 
         handler.afterConnectionEstablished(session);
 
-        assertThat(sessions.inScope("event-1")).containsExactly(session);
+        // Registered wrapped rather than raw, so that one slow reader cannot hold up the check-in
+        // request whose write triggered the fan-out.
+        assertThat(sessions.inScope("event-1"))
+                .singleElement()
+                .isInstanceOf(ConcurrentWebSocketSessionDecorator.class);
     }
 
     @Test
@@ -65,6 +70,7 @@ class DoorSocketHandlerTest {
         Map<String, Object> attributes = new HashMap<>();
         attributes.put(DoorSocketHandler.SCOPE_ATTRIBUTE, eventId);
         when(session.getAttributes()).thenReturn(attributes);
+        when(session.getId()).thenReturn("session-1");
         return session;
     }
 }

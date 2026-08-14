@@ -4,15 +4,15 @@ import { doorScopeUrl } from "../doorScopeUrl";
 import { reconnectDelayMs } from "../reconnectDelay";
 
 /**
- * Subscribes to one Event's door scope and calls {@code onHint} whenever the screen should re-read.
+ * Subscribes to one Event's door scope and calls `onHint` whenever the screen should re-read.
  *
- * <p><b>It calls back on every connect, not only on every message.</b> That single line is what makes
- * a dropped connection harmless: a screen that was offline for a minute re-reads the moment it is back
- * and lands on the same answer as one that never dropped, without the server having to remember what
- * it missed. Messages are then just an optimisation on top of that guarantee — they make the re-read
- * prompt instead of eventual.
+ * It calls back on every connect, not only on every message — which is what makes a dropped
+ * connection harmless. A screen that was offline for a minute re-reads the moment it is back and lands
+ * on the same answer as one that never dropped, without the server having to remember what it missed.
+ * Messages are then only an optimisation on top of that guarantee: they make the re-read prompt
+ * instead of eventual.
  *
- * <p>Returns whether the socket is currently up, so a caller can fall back to a timer while it is not.
+ * Returns whether the socket is currently up, so a caller can fall back to a timer while it is not.
  */
 export function useDoorScopeSocket(eventId: string, onHint: () => void): boolean {
   const [connected, setConnected] = useState(false);

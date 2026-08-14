@@ -6,6 +6,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 /**
  * Registers a socket against the scope its handshake was authorized for, and forgets it when it goes.
@@ -20,20 +21,36 @@ class DoorSocketHandler extends AbstractWebSocketHandler {
     /** Written by {@link DoorScopeHandshakeInterceptor} once, and only when it said yes. */
     static final String SCOPE_ATTRIBUTE = "doorScopeEventId";
 
+    /**
+     * How long a hint may sit unsent for one screen before that screen is disconnected, and how much
+     * may pile up behind it. Both are small on purpose: a hint is worth nothing once the next one has
+     * been written, and a screen that is dropped for being slow reconnects and re-reads.
+     */
+    private static final int SEND_TIME_LIMIT_MS = 2_000;
+
+    private static final int BUFFER_SIZE_LIMIT_BYTES = 8 * 1024;
+
     private final DoorScopeSessions sessions;
 
     DoorSocketHandler(DoorScopeSessions sessions) {
         this.sessions = sessions;
     }
 
+    // Wrapped before it is registered, so that the fan-out never blocks on a socket. Without this, a
+    // projector on failing wifi would hold the check-in request that triggered the hint — the Student
+    // at the door waiting on the screen behind them, which is precisely backwards.
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        scopeOf(session).ifPresent(eventId -> sessions.join(eventId, session));
+        scopeOf(session)
+                .ifPresent(eventId -> sessions.join(
+                        eventId,
+                        new ConcurrentWebSocketSessionDecorator(
+                                session, SEND_TIME_LIMIT_MS, BUFFER_SIZE_LIMIT_BYTES)));
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        scopeOf(session).ifPresent(eventId -> sessions.leave(eventId, session));
+        scopeOf(session).ifPresent(eventId -> sessions.leave(eventId, session.getId()));
     }
 
     @Override

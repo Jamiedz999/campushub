@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
-import { DoorSocketDouble } from "../doorSocketDouble";
+import { DoorSocketDouble } from "../__doorSocketDouble";
 import { OfficerDoorPage } from "./OfficerDoorPage";
 
 const DOOR_CODE = {

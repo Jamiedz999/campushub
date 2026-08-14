@@ -4,7 +4,7 @@ import { AxiosHeaders } from "axios";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { httpClient } from "../../../lib/httpClient";
-import { DoorSocketDouble } from "../doorSocketDouble";
+import { DoorSocketDouble } from "../__doorSocketDouble";
 import { useAttendanceRoster } from "./useAttendanceRoster";
 
 function rosterOf(attended: number) {

@@ -1,7 +1,8 @@
 package com.campushub.realtime.internal;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
@@ -13,27 +14,31 @@ import org.springframework.web.socket.WebSocketSession;
  *
  * <p>Nothing here survives a restart, and nothing needs to. A screen whose socket dies reconnects and
  * re-reads, which is the same path it takes after any missed message.
+ *
+ * <p>Keyed by the session's own id rather than by the session object. What is registered is a wrapped
+ * session, and what Spring hands back at close is the original — identity would fail to match, and the
+ * scope would keep a socket nobody can write to for the life of the process.
  */
 @Component
 class DoorScopeSessions {
 
-    private final Map<String, Set<WebSocketSession>> byEventId = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, WebSocketSession>> byEventId = new ConcurrentHashMap<>();
 
     void join(String eventId, WebSocketSession session) {
-        byEventId.computeIfAbsent(eventId, key -> ConcurrentHashMap.newKeySet()).add(session);
+        byEventId.computeIfAbsent(eventId, key -> new ConcurrentHashMap<>()).put(session.getId(), session);
     }
 
-    // The empty set is dropped rather than left behind: a door that has closed for the night should not
-    // cost this map an entry until the next restart.
-    void leave(String eventId, WebSocketSession session) {
+    // The empty scope is dropped rather than left behind: a door that has closed for the night should
+    // not cost this map an entry until the next restart.
+    void leave(String eventId, String sessionId) {
         byEventId.computeIfPresent(eventId, (key, sessions) -> {
-            sessions.remove(session);
+            sessions.remove(sessionId);
             return sessions.isEmpty() ? null : sessions;
         });
     }
 
     /** A snapshot, so a session leaving mid-fan-out cannot break the fan-out. */
-    Set<WebSocketSession> inScope(String eventId) {
-        return Set.copyOf(byEventId.getOrDefault(eventId, Set.of()));
+    Collection<WebSocketSession> inScope(String eventId) {
+        return List.copyOf(byEventId.getOrDefault(eventId, Map.of()).values());
     }
 }
