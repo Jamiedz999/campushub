@@ -52,3 +52,18 @@ jobs:
       - name: Tear down the stack
         if: always()
         run: docker compose down
+
+  docs-link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check links across the README and every document it references
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --include-fragments
+            --exclude '<[a-zA-Z]+>'
+            --accept 200..=299,403,429
+            README.md CONTEXT.md docs
+          fail: true
