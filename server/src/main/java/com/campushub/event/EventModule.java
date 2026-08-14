@@ -10,6 +10,7 @@ import com.campushub.event.domain.EventPage;
 import com.campushub.event.domain.RegistrationOutcome;
 import com.campushub.venue.VenueModule.VenueDayView;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -25,6 +26,13 @@ import java.util.Set;
 // identityaccess.CurrentActor first and are responsible for the create/edit/publish check that a create
 // command has no existing resource to scope a query by (isOfficerOf the target Club).
 public interface EventModule {
+
+    /**
+     * Check-in opens this long before startsAt and closes at endsAt — see
+     * docs/adr/07-define-qr-checkin-and-anti-fraud.md. Arriving early is normal; arriving after the
+     * Event has ended is not attendance.
+     */
+    Duration CHECK_IN_OPENS_BEFORE_START = Duration.ofMinutes(15);
 
     /** Ordered, per-Event form definition stored inside the Event document. */
     record RegistrationForm(List<FormField> fields) {
@@ -120,6 +128,69 @@ public interface EventModule {
         SLOT_CROSSES_MIDNIGHT,
         SLOT_IN_DST_TRANSITION,
         SLOT_ALREADY_STARTED
+    }
+
+    /** How a Student came to be marked present. Stored, and never blurred: a scan is not an override. */
+    enum AttendanceMethod {
+        SCANNED,
+        MANUAL
+    }
+
+    /**
+     * Stable outcomes of the one attendance write. ALREADY_CHECKED_IN is reported before NOT_ON_ROSTER
+     * and both before CHECK_IN_WINDOW_CLOSED: the most reassuring true statement wins, since a second
+     * scan is an idempotent no-op rather than a failure, and a waitlisted Student deserves the specific
+     * reason rather than a generic closed door.
+     */
+    enum AttendanceOutcome {
+        SUCCESS,
+        NOT_FOUND,
+        NOT_ON_ROSTER,
+        ALREADY_CHECKED_IN,
+        CHECK_IN_WINDOW_CLOSED
+    }
+
+    /**
+     * The outcome plus the record it refers to. {@code at} and {@code method} describe the existing
+     * record on ALREADY_CHECKED_IN and the new one on SUCCESS, which is what lets the door screen say
+     * "you checked in at 18:04" without a second read.
+     */
+    record AttendanceResult(
+            AttendanceOutcome outcome, String eventTitle, Instant at, AttendanceMethod method) {
+
+        public static AttendanceResult refused(AttendanceOutcome outcome, String eventTitle) {
+            return new AttendanceResult(outcome, eventTitle, null, null);
+        }
+    }
+
+    /** What the Officer's door screen shows: no Student ids, only the counts and the window. */
+    record DoorEvent(
+            String id,
+            String title,
+            Instant startsAt,
+            Instant endsAt,
+            Instant checkInOpensAt,
+            Instant checkInClosesAt,
+            boolean checkInOpen,
+            int capacity,
+            int enrolledCount,
+            int attendedCount) {}
+
+    /** One enrolled Student and their attendance, if any — the door's manual-override list. */
+    record AttendanceRosterEntry(String studentId, Instant attendedAt, AttendanceMethod method) {}
+
+    /** Officer-only: the Roster with attendance against it. Waitlisted Students are not on it. */
+    record AttendanceRoster(
+            String eventId,
+            String title,
+            int capacity,
+            int enrolledCount,
+            int attendedCount,
+            List<AttendanceRosterEntry> items) {
+
+        public AttendanceRoster {
+            items = List.copyOf(items);
+        }
     }
 
     /** Stable result returned to the Registration module's orchestration path. */
@@ -267,6 +338,24 @@ public interface EventModule {
 
     /** Withdraws the Student from a held Seat or the Waitlist, until the Event starts. */
     WithdrawalOutcome withdraw(String eventId, String studentId);
+
+    /** The door screen's own Event view, scoped to the caller's officer Clubs. */
+    Optional<DoorEvent> findDoorEventForOfficer(String eventId, Set<String> callerOfficerClubIds);
+
+    /** The Roster with attendance against it, scoped to the caller's officer Clubs. */
+    Optional<AttendanceRoster> findAttendanceForOfficer(String eventId, Set<String> callerOfficerClubIds);
+
+    /**
+     * Records a verified scan. The {@code checkin} module proves presence and identity and hands the
+     * verified pair here; this module owns the Seat Ledger and performs the write. See
+     * docs/adr/07-define-qr-checkin-and-anti-fraud.md — the Roster check and the idempotency guard live
+     * in that one write, and it is deliberately the only Seat Ledger write without the startsAt freeze.
+     */
+    AttendanceResult recordScannedAttendance(String eventId, String studentId);
+
+    /** The Officer's manual override for a failed phone or a dead screen, stored as MANUAL. */
+    AttendanceResult recordManualAttendance(
+            String eventId, String studentId, Set<String> callerOfficerClubIds);
 
     /** The Student's "my events": every Event, whatever its Status, where they hold a Seat. */
     EventPage findEnrolled(String studentId, int page, int size);

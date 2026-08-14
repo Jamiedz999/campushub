@@ -1,12 +1,15 @@
 package com.campushub.event.internal;
 
 import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.AttendanceOutcome;
+import com.campushub.event.EventModule.AttendanceResult;
 import com.campushub.event.EventModule.FormUpdateOutcome;
 import com.campushub.event.EventModule.RegistrationForm;
 import com.campushub.event.EventModule.SeatRequestOutcome;
 import com.campushub.event.EventModule.SeatRequestResult;
 import com.campushub.event.EventModule.SlotCommandOutcome;
 import com.campushub.event.EventModule.WithdrawalOutcome;
+import com.campushub.event.domain.AttendanceEntry;
 import com.campushub.event.domain.Event;
 import com.campushub.event.domain.EventBrowseQuery;
 import com.campushub.event.domain.EventCommandResult;
@@ -24,6 +27,7 @@ import com.campushub.venue.VenueModule.SlotRequestResult;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -347,6 +351,119 @@ class EventModuleImpl implements EventModule {
             return WithdrawalOutcome.NOT_FOUND;
         }
         return classifyWithdrawalFailure(event.get(), now);
+    }
+
+    @Override
+    public Optional<DoorEvent> findDoorEventForOfficer(String eventId, Set<String> callerOfficerClubIds) {
+        Instant now = clock.instant();
+        return repository.findScopedById(eventId, callerOfficerClubIds).map(event -> new DoorEvent(
+                event.getId(),
+                event.getTitle(),
+                event.getStartsAt(),
+                event.getEndsAt(),
+                checkInOpensAt(event),
+                event.getEndsAt(),
+                isCheckInOpen(event, now),
+                event.getCapacity(),
+                event.getEnrolled().size(),
+                event.getAttendance().size()));
+    }
+
+    @Override
+    public Optional<AttendanceRoster> findAttendanceForOfficer(
+            String eventId, Set<String> callerOfficerClubIds) {
+        return repository.findScopedById(eventId, callerOfficerClubIds).map(event -> {
+            List<AttendanceRosterEntry> items = event.getEnrolled().stream()
+                    .map(seat -> new AttendanceRosterEntry(
+                            seat.studentId(),
+                            attendanceOf(event, seat.studentId())
+                                    .map(AttendanceEntry::at)
+                                    .orElse(null),
+                            attendanceOf(event, seat.studentId())
+                                    .map(AttendanceEntry::method)
+                                    .orElse(null)))
+                    .toList();
+            return new AttendanceRoster(
+                    event.getId(),
+                    event.getTitle(),
+                    event.getCapacity(),
+                    event.getEnrolled().size(),
+                    event.getAttendance().size(),
+                    items);
+        });
+    }
+
+    @Override
+    public AttendanceResult recordScannedAttendance(String eventId, String studentId) {
+        Instant now = clock.instant();
+        Optional<Event> written = repository.recordScannedAttendance(eventId, studentId, now);
+        return written.map(event -> succeeded(event, studentId))
+                .orElseGet(() -> classifyAttendanceFailure(
+                        repository.findById(eventId).filter(event -> event.getStatus() != EventStatus.DRAFT),
+                        studentId,
+                        now));
+    }
+
+    @Override
+    public AttendanceResult recordManualAttendance(
+            String eventId, String studentId, Set<String> callerOfficerClubIds) {
+        Instant now = clock.instant();
+        Optional<Event> written =
+                repository.recordManualAttendance(eventId, callerOfficerClubIds, studentId, now);
+        return written.map(event -> succeeded(event, studentId))
+                .orElseGet(() -> classifyAttendanceFailure(
+                        repository.findScopedById(eventId, callerOfficerClubIds), studentId, now));
+    }
+
+    private static AttendanceResult succeeded(Event event, String studentId) {
+        AttendanceEntry entry = attendanceOf(event, studentId).orElseThrow();
+        return new AttendanceResult(
+                AttendanceOutcome.SUCCESS, event.getTitle(), entry.at(), entry.method());
+    }
+
+    /**
+     * One follow-up read, exactly as every other refused Seat Ledger command classifies itself — see
+     * docs/adr/04-define-registration-capacity-and-waitlist.md. Correctness lives in the guarded write;
+     * this only decides which of the door's five failure screens the Student is shown.
+     */
+    private static AttendanceResult classifyAttendanceFailure(
+            Optional<Event> found, String studentId, Instant now) {
+        if (found.isEmpty()) {
+            return AttendanceResult.refused(AttendanceOutcome.NOT_FOUND, null);
+        }
+        Event event = found.get();
+        Optional<AttendanceEntry> existing = attendanceOf(event, studentId);
+        if (existing.isPresent()) {
+            return new AttendanceResult(
+                    AttendanceOutcome.ALREADY_CHECKED_IN,
+                    event.getTitle(),
+                    existing.get().at(),
+                    existing.get().method());
+        }
+        boolean onRoster = event.getEnrolled().stream()
+                .anyMatch(seat -> seat.studentId().equals(studentId));
+        if (!onRoster) {
+            return AttendanceResult.refused(AttendanceOutcome.NOT_ON_ROSTER, event.getTitle());
+        }
+        // Everything left is the window: not open yet, already ended, or an Event that was cancelled and
+        // therefore has no door at all. The Student is told the door is closed, which is true of all three.
+        return AttendanceResult.refused(AttendanceOutcome.CHECK_IN_WINDOW_CLOSED, event.getTitle());
+    }
+
+    private static Optional<AttendanceEntry> attendanceOf(Event event, String studentId) {
+        return event.getAttendance().stream()
+                .filter(entry -> entry.studentId().equals(studentId))
+                .findFirst();
+    }
+
+    private static Instant checkInOpensAt(Event event) {
+        return event.getStartsAt().minus(CHECK_IN_OPENS_BEFORE_START);
+    }
+
+    private static boolean isCheckInOpen(Event event, Instant now) {
+        return event.getStatus() == EventStatus.PUBLISHED
+                && !now.isBefore(checkInOpensAt(event))
+                && now.isBefore(event.getEndsAt());
     }
 
     @Override

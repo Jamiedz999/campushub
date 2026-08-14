@@ -72,6 +72,48 @@ describe("normalizeApiError", () => {
     expect(result.detail).toBe("Request failed with status code 502");
   });
 
+  it("keeps every other problem member, so a refusal can carry the fact the client needs", () => {
+    const requestConfig = { headers: new AxiosHeaders() };
+    const axiosError = new AxiosError("Request failed with status code 409", "ERR_BAD_REQUEST", requestConfig, undefined, {
+      status: 409,
+      statusText: "Conflict",
+      headers: new AxiosHeaders(),
+      config: requestConfig,
+      data: {
+        type: "about:blank",
+        title: "Conflict",
+        status: 409,
+        detail: "You are already checked in.",
+        instance: "/api/events/abc123/attendance",
+        code: "ALREADY_CHECKED_IN",
+        at: "2026-03-20T18:04:00Z",
+        method: "SCANNED",
+      },
+    });
+
+    const result = normalizeApiError(axiosError);
+
+    expect(result.extensions).toEqual({ at: "2026-03-20T18:04:00Z", method: "SCANNED" });
+    expect(result.stringExtension("at")).toBe("2026-03-20T18:04:00Z");
+  });
+
+  it("trusts an extension member only when it is a string", () => {
+    const error = new ApiError({
+      code: "ALREADY_CHECKED_IN",
+      status: 409,
+      title: "Conflict",
+      detail: "",
+      extensions: { at: 1774000020 },
+    });
+
+    expect(error.stringExtension("at")).toBeNull();
+    expect(error.stringExtension("absent")).toBeNull();
+  });
+
+  it("carries no extensions when the problem document had none", () => {
+    expect(new ApiError({ code: "NOT_FOUND", status: 404, title: "", detail: "" }).extensions).toEqual({});
+  });
+
   it("falls back to the network error code when the response body is an object without a code", () => {
     const requestConfig = { headers: new AxiosHeaders() };
     const axiosError = new AxiosError("Request failed with status code 500", "ERR_BAD_RESPONSE", requestConfig, undefined, {

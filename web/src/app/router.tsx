@@ -1,4 +1,6 @@
 import { createBrowserRouter } from "react-router";
+import { OfficerDoorPage } from "../features/checkin/components/OfficerDoorPage";
+import { StudentCheckInPage } from "../features/checkin/components/StudentCheckInPage";
 import { EventsBrowsePage } from "../features/events/components/EventsBrowsePage";
 import { OfficerCapacityPage } from "../features/events/components/OfficerCapacityPage";
 import { OfficerRegistrationFormPage } from "../features/events/components/OfficerRegistrationFormPage";
@@ -33,6 +35,17 @@ export const router = createBrowserRouter([
       {
         path: "/events/:eventId",
         element: <EventRegistrationPage />,
+      },
+      {
+        // Where the door's QR code points. Behind RequireAuth like every other route: a Student who
+        // scans while signed out signs in first and then scans the screen again, which costs them one
+        // rotation and keeps the rule that identity always comes from an established session.
+        path: "/checkin/:eventId",
+        element: <StudentCheckInPage />,
+      },
+      {
+        path: "/officer/events/:eventId/door",
+        element: <OfficerDoorPage />,
       },
       {
         path: "/officer/events/:eventId/venue",

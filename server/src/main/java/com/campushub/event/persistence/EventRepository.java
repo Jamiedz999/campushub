@@ -1,5 +1,7 @@
 package com.campushub.event.persistence;
 
+import com.campushub.event.EventModule;
+import com.campushub.event.EventModule.AttendanceMethod;
 import com.campushub.event.EventModule.RegistrationForm;
 import com.campushub.event.domain.EnrolledEntry;
 import com.campushub.event.domain.EnrollmentVia;
@@ -581,6 +583,74 @@ public class EventRepository {
     private static Document promotedCountAfter(Document studentsToPromote) {
         return new Document(
                 "$add", List.of(new Document("$ifNull", List.of("$promotedCount", 0)), studentsToPromote));
+    }
+
+    /**
+     * A verified scan, appended in one guarded write. Unscoped by Club — the caller is the Student
+     * themselves, and {@code checkin} has already proven both halves: the rotating code proves presence,
+     * the session proves identity.
+     */
+    public Optional<Event> recordScannedAttendance(String eventId, String studentId, Instant now) {
+        return recordAttendance(eventId, null, studentId, AttendanceMethod.SCANNED, now);
+    }
+
+    /** The Officer's override, scoped by their Club grants in the same one write. */
+    public Optional<Event> recordManualAttendance(
+            String eventId, Set<String> clubIds, String studentId, Instant now) {
+        return recordAttendance(eventId, clubIds, studentId, AttendanceMethod.MANUAL, now);
+    }
+
+    /**
+     * The one Seat Ledger write that deliberately omits the {@code startsAt: { $gt: now }} freeze every
+     * other one carries — it exists to happen after the Event has begun, so it carries its own window
+     * instead: from 15 minutes before startsAt until endsAt. See
+     * docs/adr/07-define-qr-checkin-and-anti-fraud.md.
+     *
+     * <p>{@code enrolled.studentId} is the Roster check, so a Student still on the Waitlist when the
+     * Event started cannot check in however early they arrive. The {@code $ne} guard on
+     * {@code attendance.studentId} makes the write idempotent: a second scan matches nothing, appends
+     * nothing, and is reported as "already checked in" rather than as an error. The token is not
+     * single-use — everyone in the room scans the same code in the same window — so replay protection
+     * comes from this guard, never from consuming the code.
+     *
+     * <p>Returns the Event as it stands after a winning write, so the caller reports the new record and
+     * the Event's title without a second read; an empty result is classified by one follow-up read.
+     */
+    private Optional<Event> recordAttendance(
+            String eventId, Set<String> clubIds, String studentId, AttendanceMethod method, Instant now) {
+        Criteria filter = Criteria.where("id")
+                .is(eventId)
+                .and("status")
+                .is(EventStatus.PUBLISHED)
+                .and("startsAt")
+                .lte(now.plus(EventModule.CHECK_IN_OPENS_BEFORE_START))
+                .and("endsAt")
+                .gt(now)
+                .and("enrolled.studentId")
+                .is(studentId)
+                .and("attendance.studentId")
+                .ne(studentId);
+        if (clubIds != null) {
+            filter = filter.and("clubId").in(clubIds);
+        }
+        Document entry = new Document("studentId", studentId)
+                .append("at", Date.from(now))
+                .append("method", method.name());
+
+        Event updated = mongoTemplate.findAndModify(
+                new Query(filter),
+                new Update().push("attendance", entry),
+                FindAndModifyOptions.options().returnNew(true),
+                Event.class);
+        return Optional.ofNullable(updated);
+    }
+
+    /** Mongock-owned default for Event documents written before check-in existed. */
+    public void initializeAttendance() {
+        mongoTemplate.updateMulti(
+                Query.query(Criteria.where("attendance").is(null)),
+                new Update().set("attendance", List.of()),
+                Event.class);
     }
 
     /** The Student's own "my events" list — every Event, whatever its Status, where they hold a Seat. */

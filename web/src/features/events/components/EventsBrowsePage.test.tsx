@@ -104,6 +104,9 @@ describe("EventsBrowsePage", () => {
     const venueLink = screen.getByRole("link", { name: "Book a venue" });
     expect(venueLink).toHaveAttribute("href", "/officer/events/event-1/venue");
     expect(screen.getAllByRole("link", { name: "Book a venue" })).toHaveLength(1);
+    const doorLink = screen.getByRole("link", { name: "Run the door" });
+    expect(doorLink).toHaveAttribute("href", "/officer/events/event-1/door");
+    expect(screen.getAllByRole("link", { name: "Run the door" })).toHaveLength(1);
   });
 
   it("renders an empty state when no events match", async () => {
