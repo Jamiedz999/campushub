@@ -32,9 +32,55 @@ Then open [localhost:8080](http://localhost:8080) and sign in with a demo accoun
 | University Admin | `admin@demo.campushub` | `123456` |
 
 These are demo credentials for a demo dataset, seeded only by the `development` Spring profile that
-`.env.example` activates — see [Issue #2](https://github.com/Jamiedz999/campushub/issues/2). Signing
-in as the Student lands on an already-published, already-open Event: **Beginner Darkroom Workshop**.
-There is no self-service sign-up; these three accounts are the only way in.
+`.env.example` activates — see [Issue #2](https://github.com/Jamiedz999/campushub/issues/2). There is
+no self-service sign-up; these three accounts are the only way in.
+
+The seed is deliberately not a blank slate, because the parts of this product worth thirty seconds of
+a stranger's time are the ones that only exist after it has been used:
+
+- **Beginner Darkroom Workshop** — published, open, and empty. Register on it and nothing is in your
+  way.
+- **Sold-Out Screening: Rear Window** — three Seats, all held, and the demo Student is queued behind
+  them. Withdraw one of the enrolled Students and the promotion is immediate.
+- **Intro to Super 8** — already over, and it has a history: it filled, queued someone, lost a Student
+  and promoted the queue's head into the freed Seat. Two of the three who ended up enrolled turned up,
+  one of them marked present by the Officer rather than by a scan. That is what the attendance
+  dashboard reports on, and why none of its numbers is 100%.
+- **Lecture Theatre A** — one room, two Events in the same day, so the Venue timeline shows a day
+  rather than a fact.
+
+## Deploying it
+
+There is no public URL yet, so this section is what a host would need rather than a description of one
+that exists. Nothing here is specific to a provider: the image is one container that wants one
+`MONGODB_URI`, so anything that runs a container will do.
+
+The deployed environment owes its own values for all three of these. **None has a production default**
+— `SESSION_SECRET` and `CHECKIN_HMAC_SECRET` are validated as non-blank at startup, so an environment
+missing one fails to boot rather than quietly running on a value that is public in this repository.
+
+| Variable | What it is |
+|---|---|
+| `MONGODB_URI` | The database. A managed instance or a container; the application does not care which. |
+| `SESSION_SECRET` | Signs the session cookie. `openssl rand -base64 32`. |
+| `CHECKIN_HMAC_SECRET` | Derives the rotating door code. `openssl rand -base64 32`. |
+
+`SPRING_PROFILES_ACTIVE=development` is the fourth, and it is the one to think about: it is what seeds
+the demo accounts and the demo Events above. A deployment that sets it is publishing a demo, which is
+exactly what a portfolio deployment is for — but it is an explicit act, and the seed can never reach a
+real database by accident.
+
+Then check the deployment rather than trusting it:
+
+```
+scripts/smoke-test.sh https://your-host
+```
+
+That script asserts the health endpoint, the single origin, that browsing Events is *refused* without
+a session, that a published demo account can sign in, and that the environment actually has seeded data
+to show. CI runs the same script against the composed stack on every build, so it is exercised long
+before a host exists; setting the repository variable `PUBLIC_BASE_URL` also points it at the deployed
+URL on every build, with no other change.
 
 ## Architecture
 
