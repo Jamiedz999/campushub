@@ -184,10 +184,15 @@ npm --prefix web run check
 docker compose up --build --wait
 curl --fail --silent http://localhost:8080/actuator/health
 curl --fail --silent http://localhost:8080/api/system
+npm --prefix web run e2e
 docker compose down
 ```
 
-`npm run check` runs TypeScript checking, Vitest once with coverage, and a production build. `mvnw verify` runs Checkstyle, SpotBugs, the tests and the JaCoCo gate. Cypress runs as its own CI job against the composed stack, introduced by the Issue that first needs it.
+`npm run check` runs TypeScript checking, Vitest once with coverage, and a production build. `mvnw verify` runs Checkstyle, SpotBugs, the tests and the JaCoCo gate.
+
+`npm --prefix web run e2e` is Cypress, and it runs as **its own CI job** against the composed stack — the app and its API on one origin, a real session cookie, real MongoDB. Three journeys: register → Waitlist → Promotion; the Officer publishes → books a Venue → exports the answers; door code → check-in → the dashboard counting it. **The third posts a server-derived token to the check-in endpoint rather than scanning a QR code**, because a headless browser cannot read one — the camera is the single link in that chain the E2E does not cover, and it is named in the spec rather than left to look covered.
+
+Each journey creates the Event it acts on, so nothing seeds a fixture and nothing depends on a clean database. CI runs the suite **twice in a row against the same stack** for that reason, and Cypress's retry count is zero and stays zero: a journey that needs a second attempt is a journey that is wrong.
 
 The concurrency tests run inside `mvnw verify` like everything else. `./server/mvnw verify -Pconcurrency` runs **only** them — the four atomicity claims, gathered by `@Tag("concurrency")` rather than by a directory so each stays beside the module it guards. It is a development convenience, not a build contract: it skips coverage and the linters, and CI runs the unprofiled command. See [`EVIDENCE.md`](EVIDENCE.md).
 

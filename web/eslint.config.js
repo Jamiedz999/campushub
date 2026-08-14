@@ -69,4 +69,18 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    // The Cypress journeys. They drive the composed stack rather than a component tree, so `cy`,
+    // `Cypress` and Mocha's own globals are theirs and nothing else's — declared here rather than
+    // widened across src/, where none of them should ever appear.
+    files: ["cypress/**/*.ts", "cypress.config.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.mocha,
+        cy: "readonly",
+        Cypress: "readonly",
+        expect: "readonly",
+      },
+    },
+  },
 );

@@ -8,7 +8,11 @@ import { afterEach, vi } from "vitest";
 // component asked ECharts to draw — how many series, and their names — which is exactly the smoke test
 // the ADR's testing split calls for: the arithmetic is covered thoroughly in the pure functions, and
 // the drawing lightly. See docs/adr/09-define-attendance-dashboard.md.
-vi.mock("echarts-for-react/lib/core", () => ({
+//
+// The path has to be the one Chart.tsx imports, or this mock silently stops applying and the tests
+// start failing on jsdom's missing canvas. It is also the reason no test in this suite has ever
+// rendered the real component — see the comment on that import.
+vi.mock("echarts-for-react/esm/core", () => ({
   default: ({ option }: { option: { series?: { name?: string }[] } }) => {
     const series = option.series ?? [];
     return createElement("div", {

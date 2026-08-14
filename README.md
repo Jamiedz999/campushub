@@ -107,6 +107,17 @@ that proves it rather than just asserting it.
   `atTheExactInstantRegistrationOpensPhaseBecomesRegistrationOpen`
   (`server/src/test/java/com/campushub/event/domain/PhaseTest.java:43`).
 
+- **Three journeys drive the whole stack in CI, and the one thing they cannot do is named.** Cypress
+  runs against `docker compose` — one origin, a real session cookie, real MongoDB, no stubbed API —
+  over registration to Waitlist to Promotion, an Officer publishing and booking a Venue and being
+  refused the second claim on it, and a Student getting through the door and appearing on the
+  dashboard. That third journey **posts a server-derived code to the check-in endpoint rather than
+  scanning it**, because a headless browser cannot read a QR code: the camera is the one link in that
+  chain the E2E does not cover, and the spec says so instead of letting the journey look complete.
+  Each journey creates the Event it acts on, so CI runs the set twice in a row against the same stack
+  — and Cypress's retry count is zero, because a journey that needs a second attempt is a journey
+  that is wrong. `web/cypress/e2e/`.
+
 ## What this deliberately doesn't do
 
 Promotion never holds a Seat with a timeout — a promoted Student is enrolled outright, because

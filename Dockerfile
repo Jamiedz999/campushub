@@ -2,6 +2,9 @@
 
 FROM node:24-slim AS web-build
 WORKDIR /web
+# Cypress is a devDependency of web/, and its postinstall downloads a few hundred megabytes of browser
+# that this image has no use for: the journeys run against the running container, never inside it.
+ENV CYPRESS_INSTALL_BINARY=0
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
