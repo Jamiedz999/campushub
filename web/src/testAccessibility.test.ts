@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { accessibilityViolations } from "./accessibility";
+import { accessibilityViolations } from "./testAccessibility";
 
 /**
  * Every page test that asserts `accessibilityViolations(container)` is empty is only worth the run it

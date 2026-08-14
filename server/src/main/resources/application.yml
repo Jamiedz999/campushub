@@ -42,6 +42,21 @@ campushub:
   checkin:
     hmac-secret: ${CHECKIN_HMAC_SECRET:}
 
+logging:
+  level:
+    # Spring writes the request and response body into a log line at DEBUG — "Read [...]" and
+    # "Writing [...]" — which for this application means a Student's display name and their form
+    # answers, the two things the privacy boundary exists to keep inside the owning Club. Redaction
+    # cannot help: a name has no shape to match on and an answer is arbitrary text.
+    #
+    # So these two are pinned at INFO, and turning DEBUG on for org.springframework.web to chase a
+    # routing problem no longer publishes payloads as a side effect. It is a floor, not a ceiling:
+    # naming this package explicitly still overrides it, which is the deliberate act it should be.
+    #
+    # RedactedLoggingIntegrationTest runs a full journey at DEBUG and greps for exactly these, so
+    # this line has a test rather than a comment holding it in place.
+    org.springframework.web.servlet.mvc.method.annotation: INFO
+
 mongock:
   migration-scan-package:
     - com.campushub

@@ -37,48 +37,20 @@ class CorrelationIdFilterTest {
                 .isNotEqualTo(second.getHeader(CorrelationIdFilter.HEADER));
     }
 
+    // The id is always this server's, never the caller's. An id chosen by a caller is an id that goes
+    // straight into log lines, which is how a caller writes their own — and there is no proxy in front
+    // of this application whose id would be worth keeping instead.
     @Test
-    void aCallerSuppliedIdIsKeptSoOneRequestKeepsOneIdAcrossHops() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(CorrelationIdFilter.HEADER, "edge-proxy-7f3a9c21");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        filter.doFilter(request, response, new MockFilterChain());
-
-        assertThat(response.getHeader(CorrelationIdFilter.HEADER)).isEqualTo("edge-proxy-7f3a9c21");
-    }
-
-    @Test
-    void aCallerSuppliedIdThatCouldForgeALogLineIsReplacedRatherThanEchoed() throws Exception {
+    void anIdSuppliedByTheCallerIsIgnoredRatherThanEchoedBack() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(CorrelationIdFilter.HEADER, "abc\nINFO  Nothing to see here");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, new MockFilterChain());
 
-        assertThat(response.getHeader(CorrelationIdFilter.HEADER)).doesNotContain("Nothing to see here");
-    }
-
-    @Test
-    void anAbsurdlyLongCallerSuppliedIdIsReplacedRatherThanEchoed() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(CorrelationIdFilter.HEADER, "a".repeat(65));
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        filter.doFilter(request, response, new MockFilterChain());
-
-        assertThat(response.getHeader(CorrelationIdFilter.HEADER)).hasSizeLessThan(65);
-    }
-
-    @Test
-    void anEmptyCallerSuppliedIdIsReplacedRatherThanEchoed() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader(CorrelationIdFilter.HEADER, "  ");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        filter.doFilter(request, response, new MockFilterChain());
-
-        assertThat(response.getHeader(CorrelationIdFilter.HEADER)).isNotBlank();
+        assertThat(response.getHeader(CorrelationIdFilter.HEADER))
+                .doesNotContain("Nothing to see here")
+                .isNotBlank();
     }
 
     @Test

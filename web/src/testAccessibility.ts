@@ -3,6 +3,12 @@ import axe from "axe-core";
 /**
  * Runs axe over rendered markup and returns what it found, one readable line per violation.
  *
+ * It sits at the root of `src/` beside `testSetup.ts` rather than in a directory of its own, because
+ * the documented `web/src` layout is `app/ features/ components/ lib/ types/` and this is not one of
+ * those — it is test support, which this project keeps either beside the code it doubles for, under a
+ * `__` prefix, or here. `lib/` would be wrong for the opposite reason: nothing in the shipped bundle
+ * imports this.
+ *
  * It returns rather than throws so that a failure reads as a diff — the rules that fired against the
  * empty list that should have — instead of as a stack trace with the interesting part in a message.
  *

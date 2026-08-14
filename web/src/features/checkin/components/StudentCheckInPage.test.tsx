@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
-import { accessibilityViolations } from "../../../testSupport/accessibility";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { StudentCheckInPage } from "./StudentCheckInPage";
 
 const TOKEN = "event-1.29566667.signature";

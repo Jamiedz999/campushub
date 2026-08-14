@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The console layout, replacing Boot's default for two reasons and no others.
+  The whole logging configuration, replacing Boot's default rather than extending it. Two reasons:
 
   1. Every line carries the request's correlation id, so the id on the response header is the id you
      grep the logs for. A line written outside a request says "no-request" rather than nothing, which
@@ -8,13 +8,17 @@
   2. The message and the stack trace go through %redact, so an identifier cannot reach a log line
      even from code that has never heard of this file. See com.campushub.shared.logging.LogRedaction.
 
-  Everything else — levels, the file appender, logging.level.* from application.yml — is still Boot's,
-  because this file only replaces the layout and Boot applies its properties on top of it.
+  There is one appender and it writes to stdout. That is a decision, not an omission: this application
+  is one container, and its logs are whatever the platform collects from stdout — so Boot's file
+  appender is not included here, and `logging.file.name` would therefore do nothing. Anyone who needs
+  a file appender adds it below, with %redact in its pattern, and RedactedLoggingIntegrationTest's
+  everyAppenderTheApplicationLogsThroughRedacts... fails the build if they forget. Levels are untouched: `logging.level.*` in application.yml still applies, because Boot
+  applies its properties on top of whatever this file configures.
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <conversionRule conversionWord="redact" converterClass="com.campushub.shared.logging.RedactingConverter"/>
+    <conversionRule conversionWord="redact" class="com.campushub.shared.logging.RedactingConverter"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

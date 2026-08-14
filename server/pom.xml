@@ -294,21 +294,8 @@
             </goals>
             <configuration>
               <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
-              <!--
-                One exclusion, and it is named here rather than only in the pull request that added it.
-
-                CampusHubApplication is a main method that calls SpringApplication.run. Every test in
-                this project boots it, so it is executed constantly; what cannot be covered is the
-                branch where the context fails to start, and a test that faked that would be testing
-                Spring rather than CampusHub.
-
-                `**/config/**` used to sit beside it and has been removed: this codebase is divided by
-                business module and has no config package anywhere (ADR 17 — the module layout is
-                domain/persistence/web/internal), so the exclusion covered nothing and only made the
-                gate look softer than it is. The technical baseline also permits excluding DTO records
-                with no behaviour; none is excluded, because ours all carry a `from(...)` projection
-                that is worth covering.
-              -->
+              <!-- One exclusion: a main method that every test boots and no test can fail.
+                   Justified, with the frontend's, in docs/planning/implementation/EVIDENCE.md. -->
               <excludes>
                 <exclude>**/*Application.class</exclude>
               </excludes>

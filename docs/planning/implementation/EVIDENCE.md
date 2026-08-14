@@ -1,7 +1,7 @@
-# The evidence for what does not happen
+# The concurrency and authorization evidence
 
 Status: current
-Decision records: [ADR 04](../../adr/04-define-registration-capacity-and-waitlist.md), [ADR 06](../../adr/06-define-venue-slot-booking.md), [ADR 07](../../adr/07-define-qr-checkin-and-anti-fraud.md), [ADR 08](../../adr/08-define-roles-and-resource-authorization.md), [ADR 12](../../adr/12-lock-core-technical-baseline.md)
+Decision records: [ADR 04](../../adr/04-define-registration-capacity-and-waitlist.md), [ADR 06](../../adr/06-define-venue-slot-booking.md), [ADR 07](../../adr/07-define-qr-checkin-and-anti-fraud.md), [ADR 08](../../adr/08-define-roles-and-resource-authorization.md)
 Gate: [Core Acceptance](../13-set-core-boundary-and-sprints.md#core-acceptance)
 
 ## Purpose
@@ -10,7 +10,7 @@ The project rests on two claims: **the contended writes are atomic**, and **a Cl
 
 This document is where the evidence for both is collected and where the mapping from claim to test is written down. It is not a second copy of the tests — the tests are the evidence. It exists because the tests are deliberately scattered: each one lives beside the module it covers, so no directory listing shows the set, and without a written mapping "every matrix row has a negative test" would be an assertion nobody could check.
 
-Three later claims are the same shape and are collected here for the same reason: **no Student identifier reaches a log line**, **no form answer reaches a DTO outside the owning Club**, and **the coverage gate is not being met by looking away**. They are at the end, under [What is not there](#what-is-not-there) and [The coverage exclusions](#the-coverage-exclusions).
+Three later claims have the same shape and are kept in [`HARDENING.md`](HARDENING.md) beside this one: no Student identifier reaches a log line, no form answer reaches a DTO outside the owning Club, and the coverage gate is not being met by looking away.
 
 ## The concurrency suite
 
@@ -99,38 +99,3 @@ The first three rows carry no ownership rule — they are the routes every signe
 **The Venue Slot row of ADR 08's matrix said a University Admin may book or release a Slot. The code refuses them, and [ADR 06](../../adr/06-define-venue-slot-booking.md) is why**: Admins create and manage Venues, Club Officers book them. Two resolved decisions disagreed, the implementation followed the more specific one, and nobody noticed until the rows were listed against their tests. ADR 08 is amended; the behaviour is unchanged, and `anAdminManagesVenueRecordsButCannotBookOrReleaseAnEventsSlot` was already asserting the corrected rule.
 
 This is the mapping earning its keep: the contradiction was invisible while the matrix and the tests were only ever read separately.
-
-## What is not there
-
-Three more claims about absence, from [the hardening Issue](https://github.com/Jamiedz999/campushub/issues/19). Each is stated the way it would be tested if it were false.
-
-| Claim | Test | How it could fail silently without that test |
-|---|---|---|
-| Every unsafe route requires the CSRF token | `SessionSecurityIntegrationTest.everyUnsafeRouteRefusesARequestThatDoesNotCarryTheCsrfToken` | A route added after the review is written. The test enumerates Spring's own routing table rather than a list, so a new controller is covered the day it is written |
-| …and refusing everything is not how it passes | `SessionSecurityIntegrationTest.theSameUnsafeRoutesAreReachedOnceTheCsrfTokenIsCarried` | A misspelled path also answers 403 |
-| The session and CSRF cookies carry the attributes that were decided | `SessionSecurityIntegrationTest.theSessionCookieIsHttpOnlyAndSameSiteLax`, `…theCsrfCookieIsReadableByScript…`, `…neitherCookieIsMarkedSecureOverPlainHttp…` | A default changing under an upgrade, in either direction: attributes lost, or `Secure` hardcoded on and the cookie silently undeliverable everywhere TLS is not terminated |
-| No form answer reaches a DTO a University Admin can read | `SessionSecurityIntegrationTest.aStudentsFormAnswersAreAbsentFromEveryDtoAUniversityAdminCanReach` | A field added to a DTO that already had a legitimate reason to exist. This sweeps every mapped `GET`, not a chosen few |
-| …and the answer the sweep looks for is really there | `SessionSecurityIntegrationTest.theOwningClubsOfficerDoesReadTheAnswerTheAdminSweepIsLookingFor` | A fixture that never recorded an answer passes the sweep perfectly |
-| No Student identifier reaches a log line, over a full journey | `RedactedLoggingIntegrationTest.aFullJourneyLeavesNoStudentIdentifierInTheLogOutput` | The journey 404-ing its way through and leaving nothing to grep — so the same test asserts the Student ends up on the Roster, scanned |
-| …because the masking is wired in, not because nothing tried | `RedactedLoggingIntegrationTest.aLineWrittenWithAnIdentifierInItComesOutMasked`, `…aStackTraceCarryingAnIdentifierComesOutMaskedToo` | The application logs almost nothing today, so a clean grep proves nothing on its own. These two log an identifier on purpose and watch it come out masked |
-| Every request carries a correlation id to the response and onto its log lines | `CorrelationIdFilterTest`, `RedactedLoggingIntegrationTest.everyLineAJourneyWritesCarriesTheCorrelationIdTheCallerSent` | Redaction without correlation would leave the logs safe and useless — with identifiers masked, the id on the response header is the only handle a report can be traced by |
-| The door screen stays legible from the back of a room | `doorScreenLegibility.test.ts` | A colour or a size edited to taste. The test reads the `door-` tokens out of `web/src/index.css` and holds every text pair to WCAG **AAA** and every size to a floor |
-| The rendered surfaces have no structural accessibility violations | `accessibilityViolations(...)` assertions in the `OfficerDoorPage`, `StudentCheckInPage`, `RegistrationFormFields`, `EventsBrowsePage`, `EventRegistrationPage`, `MyEventsPage` and `SignInPage` tests | The helper being reduced to returning an empty array. `testSupport/accessibility.test.ts` feeds it markup that is definitely wrong and watches it complain |
-
-**What the accessibility assertions cannot see is stated where they run**: jsdom has no layout and no canvas, so contrast, focus order and anything positional are outside axe's reach there. Contrast is covered on the one screen where it is a correctness property by the separate test above, from the declared values rather than from a render. The rest is a manual concern and is not claimed here.
-
-## The coverage exclusions
-
-The gate is JaCoCo ≥ 90% line and branch on the backend and Vitest ≥ 90% on the frontend, and [it is never lowered](TECHNICAL-BASELINE.md). An exclusion lowers it quietly, so every one in the build is listed here.
-
-| Where | Excluded | Why |
-|---|---|---|
-| `server/pom.xml` | `**/*Application.class` | A `main` that calls `SpringApplication.run`. Every test boots it; the only uncovered branch is the context failing to start, and a test for that would be testing Spring |
-| `web/vite.config.ts` | Vitest's `coverageConfigDefaults.exclude` | Config files, `dist/`, `coverage/`, type declarations and the test files themselves. Kept rather than restated — dropping it would count `vite.config.ts` towards the gate |
-| `web/vite.config.ts` | `src/main.tsx` | The entry point: mounts the app, no branching of its own |
-| `web/vite.config.ts` | `**/__boundaryFixture.ts` | Deliberate import-boundary violations that exist so `featureBoundary.test.ts` can prove the ESLint rule has teeth. Ships in no bundle |
-| `web/vite.config.ts` | `**/__doorSocketDouble.ts` | A stand-in for the browser's `WebSocket`, used only by tests. Counting a test double towards the gate would measure the tests testing themselves |
-
-**Removed rather than justified:** `**/config/**` in the JaCoCo configuration. This codebase is divided by business module and has no `config` package anywhere — [ADR 17](../../adr/17-define-code-structure-and-its-enforcement.md) gives each module `domain/`, `persistence/`, `web/` and `internal/` and nothing else — so the exclusion covered no class and only made the gate look softer than it is.
-
-The baseline also permits excluding DTO records with no behaviour. None is excluded: ours all carry a `from(...)` projection, which is exactly the code a role-specific DTO must be right about.

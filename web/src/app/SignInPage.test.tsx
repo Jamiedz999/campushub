@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiError";
 import { httpClient } from "../lib/httpClient";
-import { accessibilityViolations } from "../testSupport/accessibility";
+import { accessibilityViolations } from "../testAccessibility";
 import { SignInPage } from "./SignInPage";
 
 const UNAUTHENTICATED = new ApiError({

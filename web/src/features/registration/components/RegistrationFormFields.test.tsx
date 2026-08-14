@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RegistrationForm } from "../../../types/registrationForm";
-import { accessibilityViolations } from "../../../testSupport/accessibility";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { RegistrationFormFields } from "./RegistrationFormFields";
 import { validateRegistrationAnswers } from "../validateRegistrationAnswers";
 

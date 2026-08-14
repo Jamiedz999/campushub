@@ -124,11 +124,14 @@ that proves it rather than just asserting it.
   way out too. That costs the logs their identifiers, so every request is given a correlation id
   before the security filter chain sees it — carried on every line it writes and on the response,
   including the 401 that never reached a controller — and that id is the handle a bug report starts
-  from. Proven from both ends: a full journey whose log output contains no Student identifier
-  (`RedactedLoggingIntegrationTest.aFullJourneyLeavesNoStudentIdentifierInTheLogOutput`), and a line
-  that deliberately logs one and is watched coming out masked, because otherwise a clean grep would
-  only prove that nothing had tried
-  (`server/src/test/java/com/campushub/shared/logging/RedactedLoggingIntegrationTest.java`).
+  from. The test is a full journey run at `DEBUG` whose log output is then grepped for the Student's
+  email, id, display name and form answers, plus a line that deliberately logs an identifier and is
+  watched coming out masked, because otherwise a clean grep would only prove that nothing had tried.
+  **It caught one**: at `DEBUG`, Spring writes response bodies into the log, so the answers CSV an
+  Officer exports went in verbatim — name and answer together — and one turned-up log level would
+  have published exactly what the privacy boundary exists to protect. That package is now pinned at
+  `INFO`, with the test holding it there.
+  `server/src/test/java/com/campushub/shared/logging/RedactedLoggingIntegrationTest.java`.
 
 ## What this deliberately doesn't do
 

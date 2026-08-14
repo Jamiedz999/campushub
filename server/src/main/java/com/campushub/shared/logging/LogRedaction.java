@@ -12,6 +12,9 @@ import java.util.regex.Pattern;
  * response, which {@link com.campushub.shared.web.CorrelationIdFilter} puts on every line, and which
  * identifies a request rather than a person.
  *
+ * <p>Package-private, and reached only through {@link RedactingConverter} in the log layout, because
+ * nothing should be calling it: a call site that redacts by hand is a call site that can forget.
+ *
  * <p>The masking is here rather than at each call site because it has to hold for log lines nobody
  * has written yet, including the ones inside Spring. Today the application logs almost nothing, so a
  * grep of a journey would come back clean whether this class existed or not — which is exactly why it
@@ -19,7 +22,7 @@ import java.util.regex.Pattern;
  * {@code RedactedLoggingIntegrationTest} proves the masking is wired into the appender rather than
  * only asserting the grep comes back empty.
  */
-public final class LogRedaction {
+final class LogRedaction {
 
     private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
 
@@ -31,7 +34,7 @@ public final class LogRedaction {
 
     private LogRedaction() {}
 
-    public static String redact(String line) {
+    static String redact(String line) {
         String withoutEmails = EMAIL.matcher(line).replaceAll("[redacted-email]");
         return OBJECT_ID.matcher(withoutEmails).replaceAll("[redacted-id]");
     }

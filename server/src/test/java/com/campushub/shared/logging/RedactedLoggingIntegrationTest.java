@@ -2,6 +2,13 @@ package com.campushub.shared.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
+import ch.qos.logback.core.OutputStreamAppender;
+import ch.qos.logback.core.encoder.Encoder;
+import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
+import ch.qos.logback.core.pattern.PatternLayoutBase;
 import com.campushub.club.ClubModule;
 import com.campushub.identityaccess.domain.Account;
 import com.campushub.identityaccess.domain.SystemRole;
@@ -15,6 +22,8 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +67,11 @@ class RedactedLoggingIntegrationTest {
     private static final Logger LOG = LoggerFactory.getLogger(RedactedLoggingIntegrationTest.class);
     private static final String PASSWORD = "correct-horse-battery-staple";
     private static final String SHIRT_FIELD_ID = "507f1f77bcf86cd799439011";
+    private static final String ACCESS_FIELD_ID = "507f1f77bcf86cd799439012";
     private static final String ANSWER = "M";
+    // Distinctive enough that finding either in the output is finding this Student and not a coincidence.
+    private static final String STUDENT_NAME = "Ada Bramah-Okonjo";
+    private static final String ACCESS_ANSWER = "wheelchair-access-please";
 
     @Container
     static final MongoDBContainer MONGO_DB = new MongoDBContainer("mongo:8");
@@ -98,7 +111,7 @@ class RedactedLoggingIntegrationTest {
         Account officer = accountRepository.insert(new Account(officerEmail, hash, "Officer", SystemRole.STUDENT));
         clubModule.grantOfficer(clubId, officer.getId());
         studentId = accountRepository
-                .insert(new Account(studentEmail, hash, "Ada Lovelace", SystemRole.STUDENT))
+                .insert(new Account(studentEmail, hash, STUDENT_NAME, SystemRole.STUDENT))
                 .getId();
     }
 
@@ -112,7 +125,25 @@ class RedactedLoggingIntegrationTest {
         assertThat(output.getAll())
                 .doesNotContain(studentEmail)
                 .doesNotContain(studentId)
+                .doesNotContain(STUDENT_NAME)
                 .doesNotContain(officerEmail);
+    }
+
+    // The display name is the identifier the masking cannot help with: a name has no shape to match on,
+    // and a rule that masked every capitalised word would ruin the logs and still miss most names. So
+    // the defence for names is that nothing logs one, and this is that being asserted rather than
+    // assumed — the name travels on the Roster and on the registration view, both of which this journey
+    // reads, so a controller or a library that started logging its response body would fail here.
+    @Test
+    void neitherAStudentsDisplayNameNorTheirFormAnswersReachALogLine(CapturedOutput output) throws Exception {
+        String roster = runTheJourney();
+
+        // Both travel on payloads this journey reads — the name on the Roster, the answer on the CSV
+        // the Officer exports — so a framework or a controller that started logging a body would land
+        // them both here. Which is not hypothetical: this test is why
+        // org.springframework.web.servlet.mvc.method.annotation is pinned at INFO in application.yml.
+        assertThat(roster).contains(STUDENT_NAME);
+        assertThat(output.getAll()).doesNotContain(STUDENT_NAME).doesNotContain(ACCESS_ANSWER);
     }
 
     @Test
@@ -132,13 +163,17 @@ class RedactedLoggingIntegrationTest {
         assertThat(output.getAll()).doesNotContain(studentEmail).contains("no Seat for [redacted-email]");
     }
 
+    // The two halves of tracing joined up: the id handed to the browser is the id written beside the
+    // lines that request produced. Either alone is useless — a header nobody can look up, or a log
+    // line nobody can reach.
     @Test
-    void everyLineAJourneyWritesCarriesTheCorrelationIdTheCallerSent(CapturedOutput output) throws Exception {
+    void theIdOnTheResponseIsTheIdOnTheLogLines(CapturedOutput output) throws Exception {
         Session student = Session.signIn(port, studentEmail, PASSWORD);
 
-        student.getWithCorrelationId("/events", "trace-me-0192837465");
+        HttpResponse<String> browse = student.get("/events");
 
-        assertThat(output.getAll()).contains("[trace-me-0192837465]");
+        String correlationId = browse.headers().firstValue("X-Correlation-Id").orElseThrow();
+        assertThat(output.getAll()).contains("[" + correlationId + "]");
     }
 
     // The response is the only place a correlation id is any use to the person reporting a problem,
@@ -153,6 +188,59 @@ class RedactedLoggingIntegrationTest {
 
         assertThat(refused.statusCode()).isEqualTo(401);
         assertThat(refused.headers().firstValue("X-Correlation-Id")).isPresent();
+    }
+
+    // Redaction is a property of the layout, so it holds for exactly the appenders whose pattern asks
+    // for it. Today there is one and the tests above prove it masks; the risk is the second — a file
+    // appender, a JSON encoder, an appender arriving with a starter — which would leave a passing grep
+    // of stdout and a plain-text identifier somewhere else entirely.
+    //
+    // It is asserted here rather than as a unit test because logback-spring.xml is Boot's to apply: a
+    // bare JUnit run never reads it and would be inspecting logback's own fallback layout instead.
+    @Test
+    void everyAppenderTheApplicationLogsThroughRedactsAndCarriesTheCorrelationId() {
+        List<Appender<ILoggingEvent>> appenders = rootAppenders();
+        assertThat(appenders).as("\"every appender redacts\" is satisfied perfectly by having none").isNotEmpty();
+
+        List<String> notShownToRedact = new ArrayList<>();
+        for (Appender<ILoggingEvent> appender : appenders) {
+            Optional<String> pattern = patternOf(appender);
+            // An appender that is not pattern-driven is not a failure of redaction, but it is not a
+            // demonstration of it either, and it owes its own answer to "what stops an identifier
+            // leaving through here". This is where that is asked.
+            if (pattern.isEmpty() || !pattern.get().contains("%redact(")) {
+                notShownToRedact.add(appender.getName() + ": " + pattern.orElse("no readable pattern"));
+            } else {
+                assertThat(pattern.get()).contains("%X{correlationId");
+            }
+        }
+
+        assertThat(notShownToRedact)
+                .as("an appender that does not redact publishes what every other one masks")
+                .isEmpty();
+    }
+
+    private static List<Appender<ILoggingEvent>> rootAppenders() {
+        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        List<Appender<ILoggingEvent>> appenders = new ArrayList<>();
+        context.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME)
+                .iteratorForAppenders()
+                .forEachRemaining(appenders::add);
+        return appenders;
+    }
+
+    /** The pattern an appender writes with, or empty where it does not write through one. */
+    private static Optional<String> patternOf(Appender<ILoggingEvent> appender) {
+        if (!(appender instanceof OutputStreamAppender<ILoggingEvent> stream)) {
+            return Optional.empty();
+        }
+        Encoder<ILoggingEvent> encoder = stream.getEncoder();
+        if (!(encoder instanceof LayoutWrappingEncoder<ILoggingEvent> wrapping)) {
+            return Optional.empty();
+        }
+        return wrapping.getLayout() instanceof PatternLayoutBase<ILoggingEvent> layout
+                ? Optional.ofNullable(layout.getPattern())
+                : Optional.empty();
     }
 
     @Test
@@ -171,14 +259,18 @@ class RedactedLoggingIntegrationTest {
                 "/events/" + eventId + "/registration-form",
                 "{\"fields\":[{\"type\":\"SINGLE_CHOICE\",\"fieldId\":\"" + SHIRT_FIELD_ID
                         + "\",\"label\":\"T-shirt\",\"helpText\":null,\"required\":true,"
-                        + "\"options\":[\"S\",\"M\",\"L\"]}]}");
+                        + "\"options\":[\"S\",\"M\",\"L\"]},"
+                        + "{\"type\":\"SHORT_TEXT\",\"fieldId\":\"" + ACCESS_FIELD_ID
+                        + "\",\"label\":\"Access needs\",\"helpText\":null,\"required\":true,"
+                        + "\"maxLength\":200}]}");
         officer.post("/events/" + eventId + "/publication", "");
 
         Session student = Session.signIn(port, studentEmail, PASSWORD);
         student.get("/events");
         student.post(
                 "/events/" + eventId + "/registration",
-                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"" + ANSWER + "\"}}");
+                "{\"answers\":{\"" + SHIRT_FIELD_ID + "\":\"" + ANSWER + "\",\"" + ACCESS_FIELD_ID
+                        + "\":\"" + ACCESS_ANSWER + "\"}}");
         student.get("/events/mine");
 
         String doorCode = officer.get("/events/" + eventId + "/door-code").body();
@@ -238,14 +330,6 @@ class RedactedLoggingIntegrationTest {
         HttpResponse<String> get(String path) throws Exception {
             HttpRequest request =
                     HttpRequest.newBuilder(URI.create(url(path))).GET().build();
-            return client.send(request, HttpResponse.BodyHandlers.ofString());
-        }
-
-        HttpResponse<String> getWithCorrelationId(String path, String correlationId) throws Exception {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url(path)))
-                    .GET()
-                    .header("X-Correlation-Id", correlationId)
-                    .build();
             return client.send(request, HttpResponse.BodyHandlers.ofString());
         }
 

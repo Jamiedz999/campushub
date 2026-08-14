@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../lib/apiError";
 import { httpClient } from "../../../lib/httpClient";
 import { DoorSocketDouble } from "../__doorSocketDouble";
-import { accessibilityViolations } from "../../../testSupport/accessibility";
+import { accessibilityViolations } from "../../../testAccessibility";
 import { OfficerDoorPage } from "./OfficerDoorPage";
 
 const DOOR_CODE = {
@@ -315,5 +315,23 @@ describe("OfficerDoorPage", () => {
 
     await screen.findByRole("alert");
     expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  // doorScreenLegibility.test.ts holds the door- tokens to WCAG AAA and to a size floor, but it reads
+  // the stylesheet and never the markup — so a text-slate-500 appearing on this screen would pass it,
+  // and pass axe too, which has no contrast rule under jsdom. This is the join: whatever the door
+  // screen paints with, it comes from the palette that was measured.
+  it("takes every colour and size from the door palette rather than Tailwind's own", async () => {
+    mockReads();
+
+    const { container } = renderPage();
+    await screen.findByRole("list", { name: "Enrolled students" });
+
+    const offPalette = [...container.querySelectorAll<HTMLElement>("[class]")]
+      .flatMap((element) => [...element.classList])
+      .filter((name) => /^(text|bg|border|decoration)-[a-z]+-\d{2,3}$/.test(name))
+      .filter((name) => !name.startsWith("text-door-"));
+
+    expect([...new Set(offPalette)]).toEqual([]);
   });
 });

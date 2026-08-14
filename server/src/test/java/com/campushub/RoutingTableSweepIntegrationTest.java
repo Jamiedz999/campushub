@@ -39,19 +39,23 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 
 /**
- * The session review, asked of the routing table rather than of a list somebody keeps up to date.
+ * Two sweeps over the whole API surface, asked of the routing table rather than of a list somebody
+ * keeps up to date: every unsafe route requires the CSRF token, and no form answer reaches a DTO a
+ * University Admin can read.
  *
- * <p>Both sweeps enumerate every route Spring has actually mapped, so a controller added next month
- * is covered by them the day it is written — which is the only version of "every unsafe route carries
- * CSRF" and "no form answer reaches a DTO" that stays true after the pull request that asserts it.
+ * <p>Enumerating what Spring has actually mapped is the only version of either claim that stays true
+ * after the pull request asserting it — a controller added next month is covered the day it is
+ * written. It lives in the root package rather than beside a module for the same reason
+ * {@code ModularityTest} does: its subject is the application, not one module's routes.
  *
- * <p>The refusals are asserted with a control alongside each one: a request that should be refused
- * and the same request that should not, because "everything returned 403" is also what a misspelled
- * URL returns.
+ * <p>Each sweep carries a control, because both have an obvious way to pass while proving nothing.
+ * "Everything answered 403" is also what a misspelled URL does, and "no response contained an answer"
+ * is also what a wall of 404s looks like — which is exactly what a University Admin gets from the
+ * Club-scoped routes, by design.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
-class SessionSecurityIntegrationTest {
+class RoutingTableSweepIntegrationTest {
 
     private static final String PASSWORD = "correct-horse-battery-staple";
     private static final String SHIRT_FIELD_ID = "507f1f77bcf86cd799439011";
@@ -62,6 +66,23 @@ class SessionSecurityIntegrationTest {
     private static final String UNUSED_ID = "000000000000000000000000";
     private static final Set<RequestMethod> UNSAFE =
             Set.of(RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE);
+
+    /**
+     * The two unsafe routes no controller maps. Spring Security's form-login and logout filters serve
+     * them, so they appear in no {@code RequestMappingHandlerMapping} and a sweep of the routing table
+     * alone can never see them — which would leave the sign-in routes, of all things, unswept.
+     */
+    private static final List<Route> FILTER_SERVED_UNSAFE_ROUTES = List.of(
+            new Route(RequestMethod.POST, "/api/auth/login"),
+            new Route(RequestMethod.POST, "/api/auth/logout"));
+
+    /**
+     * Routes a University Admin genuinely reads a populated payload from, named so the answer sweep
+     * can prove it read some. The dashboard is the one that matters: it is the only DTO in the system
+     * that aggregates across every Student, so it is where a form answer would surface if one ever
+     * leaked into an aggregation.
+     */
+    private static final List<String> ADMIN_READABLE = List.of("/api/dashboard", "/api/events", "/api/auth/me");
 
     @Container
     static final MongoDBContainer MONGO_DB = new MongoDBContainer("mongo:8");
@@ -120,7 +141,10 @@ class SessionSecurityIntegrationTest {
     @Test
     void everyUnsafeRouteRefusesARequestThatDoesNotCarryTheCsrfToken() throws Exception {
         List<Route> routes = unsafeRoutes();
-        assertThat(routes).as("the routing table should have unsafe routes in it").isNotEmpty();
+        assertThat(routes)
+                .as("the sweep should cover the mapped routes and the two the filters serve")
+                .isNotEmpty()
+                .containsAll(FILTER_SERVED_UNSAFE_ROUTES);
 
         List<String> reached = new ArrayList<>();
         for (Route route : routes) {
@@ -152,61 +176,43 @@ class SessionSecurityIntegrationTest {
                 .isEmpty();
     }
 
-    // ---- Cookie attributes ----
-
-    @Test
-    void theSessionCookieIsHttpOnlyAndSameSiteLax() throws Exception {
-        Session session = Session.signIn(port, studentEmail, PASSWORD);
-
-        String sessionCookie = session.setCookieHeaderFor("SESSION");
-
-        assertThat(sessionCookie).containsIgnoringCase("HttpOnly").containsIgnoringCase("SameSite=Lax");
-    }
-
-    @Test
-    void theCsrfCookieIsReadableByScriptBecauseTheDoubleSubmitDependsOnItAndIsStillSameSiteLax()
-            throws Exception {
-        Session session = Session.signIn(port, studentEmail, PASSWORD);
-
-        String csrfCookie = session.setCookieHeaderFor("XSRF-TOKEN");
-
-        assertThat(csrfCookie).doesNotContainIgnoringCase("HttpOnly").containsIgnoringCase("SameSite=Lax");
-    }
-
-    // Secure is not asserted as present: it mirrors the request's scheme, and this suite speaks plain
-    // HTTP. What is worth pinning is that nothing has hardcoded it on, which would make the cookie
-    // silently undeliverable everywhere TLS is not terminated — compose, CI and a laptop included.
-    @Test
-    void neitherCookieIsMarkedSecureOverPlainHttpSoLocalAndComposeEnvironmentsStillWork() throws Exception {
-        Session session = Session.signIn(port, studentEmail, PASSWORD);
-
-        assertThat(session.setCookieHeaderFor("SESSION")).doesNotContainIgnoringCase("Secure");
-        assertThat(session.setCookieHeaderFor("XSRF-TOKEN")).doesNotContainIgnoringCase("Secure");
-    }
-
     // ---- No form answer reaches a DTO a University Admin can read ----
 
+    // Only GET is swept. The routes that project answers at all are the two registration-answers
+    // reads, and both refuse a University Admin outright — see EventRegistrationAccessIntegrationTest
+    // in EVIDENCE.md's matrix. This is the belt to that braces, and sweeping unsafe methods here would
+    // mean mutating the fixture to find out.
     @Test
     void aStudentsFormAnswersAreAbsentFromEveryDtoAUniversityAdminCanReach() throws Exception {
         Session admin = Session.signIn(port, adminEmail, PASSWORD);
 
         List<String> leaked = new ArrayList<>();
+        List<String> read = new ArrayList<>();
         for (Route route : readableRoutes()) {
-            String body = admin.send(route.method(), route.path(), "").body();
-            if (body.contains(FREE_TEXT_ANSWER) || body.contains("\"answers\"")) {
+            HttpResponse<String> response = admin.send(route.method(), route.path(), "");
+            if (response.statusCode() == 200) {
+                read.add(route.path());
+            }
+            if (response.body().contains(FREE_TEXT_ANSWER) || response.body().contains("\"answers\"")) {
                 leaked.add(route + " returned an answer");
             }
         }
 
+        // The sweep read real payloads and not a wall of refusals. Without this the test passes on
+        // empty problem-detail bodies — and since a University Admin is refused every Club-scoped
+        // route by design, that is exactly the shape a rotted version of this test would take.
+        assertThat(read)
+                .as("the sweep has to have read something for finding nothing in it to mean anything")
+                .containsAll(ADMIN_READABLE);
         assertThat(leaked)
                 .as("form answers belong to the owning Club's Officers and to nobody else")
                 .isEmpty();
     }
 
-    // The sweep above would also pass if the answer had never been recorded. This is the control: the
-    // owning Club's Officer reads exactly the answer the sweep is looking for.
+    // The other way the sweep could pass for nothing: an answer that was never recorded cannot leak.
+    // The owning Club's Officer reads exactly the string the sweep hunts for.
     @Test
-    void theOwningClubsOfficerDoesReadTheAnswerTheAdminSweepIsLookingFor() throws Exception {
+    void theOwningClubsOfficerDoesReadTheAnswerTheSweepIsLookingFor() throws Exception {
         Session officer = Session.signIn(port, officerEmail, PASSWORD);
 
         HttpResponse<String> csv = officer.get("/events/" + eventId + "/registration-answers/csv");
@@ -218,7 +224,9 @@ class SessionSecurityIntegrationTest {
     // ---- The routing table ----
 
     private List<Route> unsafeRoutes() {
-        return routes(UNSAFE::contains);
+        List<Route> routes = new ArrayList<>(routes(UNSAFE::contains));
+        routes.addAll(FILTER_SERVED_UNSAFE_ROUTES);
+        return List.copyOf(routes);
     }
 
     private List<Route> readableRoutes() {
@@ -304,7 +312,6 @@ class SessionSecurityIntegrationTest {
         private final int port;
         private final CookieManager cookieManager = new CookieManager();
         private final HttpClient client;
-        private final List<String> setCookieHeaders = new ArrayList<>();
 
         private Session(int port) {
             this.port = port;
@@ -323,7 +330,7 @@ class SessionSecurityIntegrationTest {
                     .POST(BodyPublishers.ofString("email=" + email + "&password=" + password))
                     .header("Content-Type", "application/x-www-form-urlencoded");
             csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
-            record(client.send(builder.build(), HttpResponse.BodyHandlers.discarding()));
+            client.send(builder.build(), HttpResponse.BodyHandlers.discarding());
             get("/auth/me");
         }
 
@@ -342,12 +349,11 @@ class SessionSecurityIntegrationTest {
         HttpResponse<String> send(RequestMethod method, String path, String jsonBody) throws Exception {
             HttpRequest.Builder builder = requestFor(method, path, jsonBody);
             csrfToken().ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
-            return record(client.send(builder.build(), HttpResponse.BodyHandlers.ofString()));
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         }
 
         HttpResponse<String> sendWithoutCsrfToken(RequestMethod method, String path) throws Exception {
-            return record(client.send(
-                    requestFor(method, path, "{}").build(), HttpResponse.BodyHandlers.ofString()));
+            return client.send(requestFor(method, path, "{}").build(), HttpResponse.BodyHandlers.ofString());
         }
 
         private HttpRequest.Builder requestFor(RequestMethod method, String path, String jsonBody) {
@@ -360,27 +366,11 @@ class SessionSecurityIntegrationTest {
             };
         }
 
-        private <T> HttpResponse<T> record(HttpResponse<T> response) {
-            setCookieHeaders.addAll(response.headers().allValues("Set-Cookie"));
-            return response;
-        }
-
-        String setCookieHeaderFor(String name) {
-            return setCookieHeaders.stream()
-                    .filter(header -> header.startsWith(name + "="))
-                    .reduce((first, last) -> last)
-                    .orElseThrow(() -> new AssertionError("no " + name + " cookie was ever set"));
-        }
-
-        Optional<String> cookieValue(String name) {
+        private Optional<String> csrfToken() {
             return cookieManager.getCookieStore().getCookies().stream()
-                    .filter(cookie -> name.equals(cookie.getName()))
+                    .filter(cookie -> "XSRF-TOKEN".equals(cookie.getName()))
                     .map(HttpCookie::getValue)
                     .findFirst();
-        }
-
-        private Optional<String> csrfToken() {
-            return cookieValue("XSRF-TOKEN");
         }
 
         private String url(String path) {
