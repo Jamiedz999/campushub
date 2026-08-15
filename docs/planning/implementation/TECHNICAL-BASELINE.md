@@ -47,12 +47,14 @@ campushub/
 │   ├── package.json  package-lock.json  tsconfig*.json  vite.config.ts
 │   ├── cypress.config.ts  cypress/
 │   └── src/…
+├── scripts/smoke-test.sh
 ├── compose.yaml
 ├── Dockerfile
 ├── .env.example
 └── README.md
 ```
 
+- **A script's directory says what it drives.** `scripts/` at the root is for scripts that drive a running instance of the whole stack — composed or deployed — and so belong to neither half. `server/scripts/` is for ones that only touch the Maven build, like the guard-removal experiment in [`EVIDENCE.md`](EVIDENCE.md).
 - Development uses Vite's same-origin `/api` proxy to Boot, so the session cookie behaves in development exactly as in production.
 - Production builds the React assets first, places them in the Boot jar, and serves browser-history routes from the same origin.
 - `server/target`, `web/node_modules`, `web/dist`, local env files and secrets are ignored. Lockfiles and the Maven Wrapper are committed.
@@ -182,11 +184,16 @@ The scaffold Issue must establish these; every later Issue keeps them green, and
 npm --prefix web ci
 npm --prefix web run check
 docker compose up --build --wait
-curl --fail --silent http://localhost:8080/actuator/health
-curl --fail --silent http://localhost:8080/api/system
+./scripts/smoke-test.sh http://localhost:8080
 npm --prefix web run e2e
 docker compose down
 ```
+
+`scripts/smoke-test.sh` replaced the two bare `curl` calls that used to stand here. It asks the same
+questions and four more — that the built web app is served from the same origin, that browsing Events is
+*refused* without a session, that a published demo account signs in, and that the environment has seeded
+data to show — and it takes a base URL, so **the deployed public URL is checked by the same script that
+checks the composed stack**. See the release Issue's [`RUBRIC.md`](RUBRIC.md).
 
 `npm run check` runs TypeScript checking, Vitest once with coverage, and a production build. `mvnw verify` runs Checkstyle, SpotBugs, the tests and the JaCoCo gate.
 

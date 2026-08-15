@@ -12,13 +12,13 @@ import java.time.Instant;
 import java.util.Set;
 import org.springframework.context.annotation.Profile;
 
-// Profile-gated, same rule as identityaccess-demo-data-004: never runs outside "development", so a
-// seeded Event is never silently mistaken for real data. Runs in its own Club rather than one of
+// Profile-gated, same rule as identityaccess-demo-data-004: runs under "development" and "demo" and
+// nowhere else, so a seeded Event is never silently mistaken for real data. Runs in its own Club rather than one of
 // identityaccess's demo Clubs — event has no way to look up a Club created by another module's
 // migration, and creating its own keeps this change unit self-contained. The demo officer is granted
 // rights on it so the officer console has something to show too. See Issue #16.
 @ChangeUnit(id = "event-demo-data-009", order = "009")
-@Profile("development")
+@Profile({"development", "demo"})
 public class EventDemoDataChangeUnit {
 
     @Execution

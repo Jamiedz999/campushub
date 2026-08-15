@@ -14,8 +14,9 @@ import org.testcontainers.mongodb.MongoDBContainer;
 
 // Proves the fail-loudly contract from docs/adr/15-define-http-api-and-time-contract.md: every secret
 // is a named property with no production default, and only the check-in HMAC secret gets a
-// development-profile fallback. Boots the real application (headless) against a real Mongo, because
-// Mongock needs one regardless of which property fails first.
+// development-profile fallback — "development" meaning that one profile and no other, including the
+// "demo" profile a public deployment runs the seed under. Boots the real application (headless)
+// against a real Mongo, because Mongock needs one regardless of which property fails first.
 @Testcontainers
 class SecretsStartupIntegrationTest {
 
@@ -34,6 +35,20 @@ class SecretsStartupIntegrationTest {
     void refusesToStartWithoutTheCheckInHmacSecretOutsideTheDevelopmentProfile() {
         SpringApplicationBuilder builder =
                 applicationBuilder("secrets-test-no-hmac").properties("SESSION_SECRET=some-session-secret");
+
+        assertThatThrownBy(builder::run).isInstanceOf(RuntimeException.class);
+    }
+
+    // The deployed demo's own acceptance bullet, from Issue #12: "No development default reaches it, and
+    // the application would refuse to start if one were missing." The deployment wants the demo seed
+    // without the developer conveniences, which is the whole reason "demo" is a separate profile from
+    // "development" — and the difference between them is only real if it is the difference this test
+    // asserts.
+    @Test
+    void refusesToStartWithoutTheCheckInHmacSecretInTheDemoProfile() {
+        SpringApplicationBuilder builder = applicationBuilder("secrets-test-demo-no-hmac")
+                .profiles("demo")
+                .properties("SESSION_SECRET=some-session-secret");
 
         assertThatThrownBy(builder::run).isInstanceOf(RuntimeException.class);
     }

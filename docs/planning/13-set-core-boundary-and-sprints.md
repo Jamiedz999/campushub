@@ -88,6 +88,9 @@ Core is done when all of these hold at once. Any one failing means Core is not d
 
 ### Predicted rubric score
 
+Checked afterwards, item by item, in [`RUBRIC.md`](implementation/RUBRIC.md) — including the two rows
+that diverged.
+
 Gate: **7.5 / 8**. The half is `Spring Data JPA (多表)` — this project uses Spring Data MongoDB, a trade the map recorded deliberately and which BookInn covers at portfolio level. Every other gate item is met, including Swagger and axios, which are named explicitly and are cheap to lose by accident.
 
 Bonus: Docker + cloud ⭐+2, CI/CD ⭐+2, linters and tests in CI +1, Dashboard +1, Cypress E2E in CI +1 = **7 points 🔵**. No Team, no Map, no Microservice, no Kafka or Redis — all four deliberate.
